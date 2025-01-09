@@ -37,9 +37,9 @@ function Linemode:btime()
 	if time == 0 then
 		return ""
 	elseif os.date("%Y", time) == os.date("%Y") then
-		return os.date("%m/%d %H:%M", time)
+		return os.date("%d/%m %H:%M", time)
 	else
-		return os.date("%m/%d  %Y", time)
+		return os.date("%d/%m  %Y", time)
 	end
 end
 
@@ -48,9 +48,9 @@ function Linemode:mtime()
 	if time == 0 then
 		return ""
 	elseif os.date("%Y", time) == os.date("%Y") then
-		return os.date("%m/%d %H:%M", time)
+		return os.date("%d/%m %H:%M", time)
 	else
-		return os.date("%m/%d  %Y", time)
+		return os.date("%d/%m  %Y", time)
 	end
 end
 
