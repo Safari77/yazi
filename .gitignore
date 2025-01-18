@@ -11,3 +11,4 @@ result-*
 .vscode/
 
 *~
+*.snap
