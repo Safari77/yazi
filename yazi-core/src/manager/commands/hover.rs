@@ -50,8 +50,16 @@ impl Manager {
 	}
 
 	fn hover_do(&mut self, url: Url, tab: Option<Id>) {
+		// Hover on the file
 		if let Ok(p) = url.strip_prefix(&self.current_or(tab).url) {
 			render!(self.current_or_mut(tab).hover(Urn::new(p)));
+		}
+
+		// Turn on tracing
+		if self.current_or(tab).hovered().is_some_and(|h| h.url == url) {
+			// `hover(Some)` occurs after user actions, such as create, rename, reveal, etc.
+			// At this point, it's intuitive to track the location of the file regardless.
+			self.current_or_mut(tab).trace = Some(url.urn_owned());
 		}
 	}
 }
