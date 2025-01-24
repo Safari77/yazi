@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::{HashMap, HashSet}, ffi::{OsStr, OsString}, os::{fd::AsFd, unix::{ffi::OsStrExt, fs::MetadataExt}}, time::Duration};
+use std::{borrow::Cow, collections::{HashMap, HashSet}, ffi::{OsStr, OsString}, os::{fd::AsFd, unix::{ffi::{OsStrExt, OsStringExt}, fs::MetadataExt}}, time::Duration};
 
 use anyhow::Result;
 use tokio::{io::{Interest, unix::AsyncFd}, time::sleep};
 use tracing::error;
-use yazi_shared::replace_cow;
+use yazi_shared::{natsort, replace_cow, replace_vec_cow};
 
 use super::{Locked, Partition, Partitions};
 
@@ -77,6 +77,7 @@ impl Partitions {
 			let mut set: HashSet<&OsStr> = set.iter().map(AsRef::as_ref).collect();
 			mounts.iter().filter_map(|p| p.dev_name()).for_each(|s| _ = set.remove(s));
 			mounts.extend(set.into_iter().map(Partition::new));
+			mounts.sort_unstable_by(|a, b| natsort(a.src.as_bytes(), b.src.as_bytes(), false));
 		};
 
 		let labels = Self::labels()?;
@@ -117,7 +118,7 @@ impl Partitions {
 			let mut it = line.split_whitespace();
 			let Some(Ok(_major)) = it.next().map(|s| s.parse::<u16>()) else { continue };
 			let Some(Ok(_minor)) = it.next().map(|s| s.parse::<u16>()) else { continue };
-			let Some(Ok(_blocks)) = it.next().map(|s| s.parse::<u16>()) else { continue };
+			let Some(Ok(_blocks)) = it.next().map(|s| s.parse::<u32>()) else { continue };
 			if let Some(name) = it.next() {
 				set.insert(Self::unmangle_octal(name).into_owned());
 			}
@@ -129,7 +130,14 @@ impl Partitions {
 		let mut map = HashMap::new();
 		for entry in std::fs::read_dir("/dev/disk/by-label")?.flatten() {
 			let meta = std::fs::metadata(entry.path())?;
-			map.insert((meta.dev(), meta.ino()), entry.file_name());
+			let name = entry.file_name();
+			map.insert(
+				(meta.dev(), meta.ino()),
+				match replace_vec_cow(name.as_bytes(), br"\x20", b" ") {
+					Cow::Borrowed(_) => name,
+					Cow::Owned(v) => OsString::from_vec(v),
+				},
+			);
 		}
 		Ok(map)
 	}
