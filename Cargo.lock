@@ -313,9 +313,9 @@ checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
 
 [[package]]
 name = "bytes"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "325918d6fe32f23b19878fe4b34794ae41fc19ddbe53b10571a4874d44ffd39b"
+checksum = "f61dac84819c6588b558454b194026eb1f09c293b9036ae9b159e74e73ab6cf9"
 
 [[package]]
 name = "cassowary"
@@ -334,9 +334,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.10"
+version = "1.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13208fcbb66eaeffe09b99fffbe1af420f00a7b35aa99ad683dfc1aa76145229"
+checksum = "755717a7de9ec452bf7f3f1a3099085deabd7f2962b861dae91ecd7a365903d2"
 dependencies = [
  "jobserver",
  "libc",
@@ -373,9 +373,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.27"
+version = "4.5.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "769b0145982b4b48713e01ec42d61614425f27b7058bda7180a3a41f30104796"
+checksum = "3e77c3243bd94243c03672cb5154667347c457ca271254724f9f393aee1c05ff"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -424,9 +424,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.24"
+version = "4.5.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54b755194d6389280185988721fffba69495eed5ee9feeee9a599b53db80318c"
+checksum = "bf4ced95c6f4a675af3da73304b9ac4ed991640c36374e4b46795c49e17cf1ed"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2458,9 +2458,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.96"
+version = "2.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5d0adab1ae378d7f53bdebc67a39f1f151407ef230f0ce2883572f5d8985c80"
+checksum = "36147f1a48ae0ec2b5b3bc5b537d267457555a10dc06f3dbc8cb11ba3006d3b1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2718,9 +2718,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.22"
+version = "0.22.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ae48d6208a266e853d946088ed816055e556cc6028c5e8e2b84d9fa5dd7c7f5"
+checksum = "02a8b472d1a3d7c18e2d61a489aee3453fd9031c33e4f55bd533f4a7adca1bee"
 dependencies = [
  "indexmap",
  "serde",
@@ -3294,9 +3294,9 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "winnow"
-version = "0.6.25"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad699df48212c6cc6eb4435f35500ac6fd3b9913324f938aea302022ce19d310"
+checksum = "86e376c75f4f43f44db463cf729e0d3acbf954d13e22c51e26e4c264b4ab545f"
 dependencies = [
  "memchr",
 ]
@@ -3321,7 +3321,7 @@ checksum = "1e9df38ee2d2c3c5948ea468a8406ff0db0b29ae1ffde1bcf20ef305bcc95c51"
 
 [[package]]
 name = "yazi-adapter"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "ansi-to-tui",
  "anyhow",
@@ -3341,7 +3341,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-boot"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "clap",
  "clap_complete",
@@ -3359,7 +3359,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-cli"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -3382,7 +3382,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-codegen"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "quote",
  "syn",
@@ -3390,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-config"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "bitflags 2.8.0",
@@ -3410,7 +3410,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-core"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "bitflags 2.8.0",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-dds"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "mlua",
@@ -3465,7 +3465,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-ffi"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "core-foundation-sys",
@@ -3476,7 +3476,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-fm"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "better-panic",
@@ -3512,7 +3512,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-fs"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3538,11 +3538,11 @@ dependencies = [
 
 [[package]]
 name = "yazi-macro"
-version = "0.4.3"
+version = "25.2.5"
 
 [[package]]
 name = "yazi-plugin"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "ansi-to-tui",
  "anyhow",
@@ -3583,7 +3583,7 @@ checksum = "f4b6c8e12e39ac0f79fa96f36e5b88e0da8d230691abd729eec709b43c74f632"
 
 [[package]]
 name = "yazi-proxy"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "mlua",
@@ -3596,7 +3596,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-scheduler"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "async-priority-channel",
@@ -3619,7 +3619,7 @@ dependencies = [
 
 [[package]]
 name = "yazi-shared"
-version = "0.4.3"
+version = "25.2.5"
 dependencies = [
  "anyhow",
  "crossterm",

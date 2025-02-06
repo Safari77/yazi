@@ -1,6 +1,16 @@
 <div align="center">
-  <img src="assets/logo.png" alt="Yazi logo" width="20%">
+  <sup>Special thanks to:</sup>
+  <br><br>
+  <a href="https://www.warp.dev/?utm_source=github&utm_medium=referral&utm_campaign=yazi" target="_blank">
+    <img alt="Warp sponsorship" width="300" src="https://github.com/user-attachments/assets/c7f141e7-9751-407d-bb0e-d6f2c487b34f">
+    <br>
+    <b>Warp, the intelligent terminal</b>
+    <br>
+    <sup>Yazi's AI-powered terminal of choice!<br>Available for macOS and Linux</sup>
+  </a>
 </div>
+
+<br>
 
 ## Yazi - ⚡️ Blazing Fast Terminal File Manager
 
@@ -24,7 +34,11 @@ Yazi (means "duck") is a terminal file manager written in Rust, based on non-blo
 
 https://github.com/sxyazi/yazi/assets/17523360/92ff23fa-0cd5-4f04-b387-894c12265cc7
 
-⚠️ Note: Yazi is currently in heavy development and may be unstable. The API is subject to change without prior notice.
+## Project status
+
+Public beta, can be used as a daily driver.
+
+Yazi is currently in heavy development, expect breaking changes.
 
 ## Documentation
 
@@ -46,7 +60,7 @@ https://github.com/sxyazi/yazi/assets/17523360/92ff23fa-0cd5-4f04-b387-894c12265
 | [Konsole](https://invent.kde.org/utilities/konsole)                                                           | [Kitty old protocol][kgp-old]          | ✅ Built-in                                           |
 | [foot](https://codeberg.org/dnkl/foot)                                                                        | [Sixel graphics format][sixel]         | ✅ Built-in                                           |
 | [Ghostty](https://github.com/ghostty-org/ghostty)                                                             | [Kitty unicode placeholders][kgp]      | ✅ Built-in                                           |
-| [Windows Terminal Preview](https://github.com/microsoft/terminal/releases/tag/v1.22.2702.0) (>= v1.22.2702.0) | [Sixel graphics format][sixel]         | ✅ Built-in                                           |
+| [Windows Terminal](https://github.com/microsoft/terminal) (>= v1.22.10352.0)                                  | [Sixel graphics format][sixel]         | ✅ Built-in                                           |
 | [st with Sixel patch](https://github.com/bakkeby/st-flexipatch)                                               | [Sixel graphics format][sixel]         | ✅ Built-in                                           |
 | [Tabby](https://github.com/Eugeny/tabby)                                                                      | [Inline images protocol][iip]          | ✅ Built-in                                           |
 | [VSCode](https://github.com/microsoft/vscode)                                                                 | [Inline images protocol][iip]          | ✅ Built-in                                           |
