@@ -78,6 +78,12 @@ impl Cmd {
 	#[inline]
 	pub fn first_str(&self) -> Option<&str> { self.str(0) }
 
+	#[inline]
+	pub fn second(&self) -> Option<&Data> { self.get(1) }
+
+	#[inline]
+	pub fn second_str(&self) -> Option<&str> { self.str(1) }
+
 	// --- Take
 	#[inline]
 	pub fn take(&mut self, name: impl Into<DataKey>) -> Option<Data> {
@@ -165,7 +171,7 @@ impl FromStr for Cmd {
 
 	#[allow(clippy::explicit_counter_loop)]
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		let mut args = shell_words::split(s)?;
+		let mut args = crate::shell::split_unix(s)?;
 		if args.is_empty() || args[0].is_empty() {
 			bail!("command name cannot be empty");
 		}
