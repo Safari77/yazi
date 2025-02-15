@@ -3581,6 +3581,7 @@ version = "25.2.11"
 dependencies = [
  "anyhow",
  "mlua",
+ "serde",
  "tokio",
  "yazi-config",
  "yazi-macro",
