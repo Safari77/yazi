@@ -196,6 +196,12 @@ jobs:
             yazi-*.snap
           generate_release_notes: true
 
+      - name: Push snap to candidate channel
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
+        run: |
+          parallel 'snapcraft push -v --release latest/candidate {}' ::: *.snap
+
   nightly:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     permissions:
@@ -232,3 +238,9 @@ jobs:
           name: Nightly Build
           body: ${{ env.NIGHTLY_BODY }}
           target_commitish: ${{ github.sha }}
+
+      - name: Push snap to edge channel
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
+        run: |
+          parallel 'snapcraft push -v --release latest/edge {}' ::: *.snap
