@@ -1,4 +1,4 @@
-use mlua::{ExternalError, FromLua, IntoLua, Lua, MetaMethod, UserDataFields, UserDataMethods, UserDataRef, Value};
+use mlua::{AnyUserData, ExternalError, FromLua, IntoLua, Lua, MetaMethod, UserDataFields, UserDataMethods, UserDataRef, Value};
 
 pub type UrlRef = UserDataRef<yazi_shared::url::Url>;
 
@@ -54,8 +54,8 @@ impl Url {
 				Ok(path.ok().map(Self::from))
 			});
 
-			reg.add_method("to_search", |_, me, frag: mlua::String| {
-				Ok(Self(me.to_search(&frag.to_str()?)))
+			reg.add_function_mut("into_search", |_, (ud, frag): (AnyUserData, mlua::String)| {
+				Ok(Self(ud.take::<yazi_shared::url::Url>()?.into_search(&frag.to_str()?)))
 			});
 
 			reg.add_meta_method(MetaMethod::Eq, |_, me, other: UrlRef| Ok(me == &*other));
