@@ -11,9 +11,10 @@ pub struct Tty {
 
 impl Default for Tty {
 	fn default() -> Self {
-		let stdin = Handle::new(false).expect("failed to open stdin");
-		let stdout = Handle::new(true).expect("failed to open stdout");
-		Self { stdin: Mutex::new(stdin), stdout: Mutex::new(BufWriter::new(stdout)) }
+		Self {
+			stdin:  Mutex::new(Handle::new(false)),
+			stdout: Mutex::new(BufWriter::new(Handle::new(true))),
+		}
 	}
 }
 
@@ -67,8 +68,14 @@ impl Read for TtyReader<'_> {
 // --- Writer
 pub struct TtyWriter<'a>(&'a Mutex<BufWriter<Handle>>);
 
-impl Write for TtyWriter<'_> {
+impl std::io::Write for TtyWriter<'_> {
 	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> { self.0.lock().write(buf) }
 
 	fn flush(&mut self) -> std::io::Result<()> { self.0.lock().flush() }
+}
+
+impl std::fmt::Write for TtyWriter<'_> {
+	fn write_str(&mut self, s: &str) -> std::fmt::Result {
+		self.0.lock().write_all(s.as_bytes()).map_err(|_| std::fmt::Error)
+	}
 }
