@@ -177,7 +177,7 @@ mod mouse {
 
 		#[cfg(windows)]
 		fn execute_winapi(&self) -> std::io::Result<()> {
-			if MGR.mouse_events.is_empty() {
+			if YAZI.mgr.mouse_events.is_empty() {
 				Ok(())
 			} else if self.0 {
 				EnableMouseCapture.execute_winapi()
