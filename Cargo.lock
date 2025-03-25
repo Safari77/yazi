@@ -3402,11 +3402,7 @@ dependencies = [
 name = "zerocopy-derive"
 version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-<<<<<<< HEAD
-checksum = "6352c01d0edd5db859a63e2605f4ea3183ddbd15e2c4a9e7d32184df75e4f154"
-=======
 checksum = "a996a8f63c5c4448cd959ac1bab0aaa3306ccfd060472f85943ee0750f0169be"
->>>>>>> upstream/main
 dependencies = [
  "proc-macro2",
  "quote",
