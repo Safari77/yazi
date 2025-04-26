@@ -6,7 +6,7 @@ function M:setup()
 	ps.sub_remote("extract", function(args)
 		local noisy = #args == 1 and ' "" --noisy' or ' ""'
 		for _, arg in ipairs(args) do
-			ya.mgr_emit("plugin", { self._id, ya.quote(arg, true) .. noisy })
+			ya.emit("plugin", { self._id, ya.quote(arg, true) .. noisy })
 		end
 	end)
 end
@@ -28,6 +28,7 @@ function M:entry(job)
 
 		local value, event = ya.input {
 			title = string.format('Password for "%s":', from.name),
+			obscure = true,
 			position = { "center", w = 50 },
 		}
 		if event == 1 then
