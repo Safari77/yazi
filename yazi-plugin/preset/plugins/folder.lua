@@ -16,9 +16,7 @@ function M:peek(job)
 	if #folder.files == 0 then
 		local done, err = folder.stage()
 		local s = not done and "Loading..." or not err and "No items" or string.format("Error: %s", err)
-		return ya.preview_widgets(job, {
-			ui.Text(s):area(job.area):align(ui.Text.CENTER),
-		})
+		return ya.preview_widget(job, ui.Text(s):area(job.area):align(ui.Text.CENTER))
 	end
 
 	local entities = {}
@@ -26,7 +24,7 @@ function M:peek(job)
 		entities[#entities + 1] = Entity:new(f):redraw()
 	end
 
-	ya.preview_widgets(job, {
+	ya.preview_widget(job, {
 		ui.List(entities):area(job.area),
 		table.unpack(Marker:new(job.area, folder):redraw()),
 	})
@@ -44,6 +42,50 @@ function M:seek(job)
 	end
 end
 
-function M:spot(job) require("file"):spot(job) end
+function M:spot(job)
+	self.size, self.last = 0, 0
+
+	local url = job.file.url
+	local it = fs.calc_size(url)
+	while true do
+		local next = it:recv()
+		if next then
+			self.size = self.size + next
+			self:spot_multi(job, false)
+		else
+			break
+		end
+	end
+
+	local op = fs.op("size", { url = url.parent, sizes = { [url.urn] = self.size } })
+	ya.emit("update_files", { op = op })
+
+	self:spot_multi(job, true)
+end
+
+function M:spot_multi(job, force)
+	local now = ya.time()
+	if not force and now < self.last + 0.1 then
+		return
+	end
+
+	local rows = {
+		ui.Row({ "Folder" }):style(ui.Style():fg("green")),
+		ui.Row { "  Size:", ya.readable_size(self.size) .. (force and "" or " (?)") },
+		ui.Row {},
+	}
+
+	ya.spot_table(
+		job,
+		ui.Table(ya.list_merge(rows, require("file"):spot_base(job)))
+			:area(ui.Pos { "center", w = 60, h = 20 })
+			:row(self.last == 0 and 1 or nil)
+			:col(1)
+			:col_style(th.spot.tbl_col)
+			:cell_style(th.spot.tbl_cell)
+			:widths { ui.Constraint.Length(14), ui.Constraint.Fill(1) }
+	)
+	self.last = now
+end
 
 return M

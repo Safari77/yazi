@@ -65,7 +65,7 @@ impl Client {
 	}
 
 	/// Connect to an existing server to send a single message.
-	pub async fn shot(kind: &str, receiver: u64, body: &str) -> Result<()> {
+	pub async fn shot(kind: &str, receiver: Id, body: &str) -> Result<()> {
 		Body::validate(kind)?;
 
 		let payload = format!(
@@ -79,12 +79,12 @@ impl Client {
 		writer.flush().await?;
 		drop(writer);
 
-		let mut version = None;
+		let (mut peers, mut version) = Default::default();
 		while let Ok(Some(line)) = lines.next_line().await {
 			match line.split(',').next() {
-				Some("hey") if version.is_none() => {
+				Some("hey") => {
 					if let Ok(Body::Hey(hey)) = Payload::from_str(&line).map(|p| p.body) {
-						version = Some(hey.version);
+						(peers, version) = (hey.peers, Some(hey.version));
 					}
 				}
 				Some("bye") => break,
@@ -94,11 +94,30 @@ impl Client {
 
 		if version.as_deref() != Some(BodyHi::version()) {
 			bail!(
-				"Incompatible version (Ya {}, Yazi {}), please restart all `ya` and `yazi` processes if you upgrade either one.",
+				"Incompatible version (Ya {}, Yazi {}). Restart all `ya` and `yazi` processes if you upgrade either one.",
 				BodyHi::version(),
 				version.as_deref().unwrap_or("Unknown")
 			);
 		}
+
+		match (receiver, peers.get(&receiver).map(|p| p.able(kind))) {
+			// Send to all receivers
+			(Id(0), _) if peers.is_empty() => {
+				bail!("No receiver found. Check if any receivers are running.")
+			}
+			(Id(0), _) if peers.values().all(|p| !p.able(kind)) => {
+				bail!("No receiver has the ability to receive `{kind}` messages.")
+			}
+			(Id(0), _) => {}
+
+			// Send to a specific receiver
+			(_, Some(true)) => {}
+			(_, Some(false)) => {
+				bail!("Receiver `{receiver}` does not have the ability to receive `{kind}` messages.")
+			}
+			(_, None) => bail!("Receiver `{receiver}` not found. Check if the receiver is running."),
+		}
+
 		Ok(())
 	}
 
@@ -125,11 +144,10 @@ impl Client {
 					}
 				}
 				None => loop {
+					time::sleep(time::Duration::from_secs(1)).await;
 					if let Ok(new) = make(&kinds).await {
 						lines = new;
 						break;
-					} else {
-						time::sleep(time::Duration::from_secs(1)).await;
 					}
 				},
 			}
