@@ -72,13 +72,10 @@ pub(super) enum CommandPkg {
 		ids: Vec<String>,
 	},
 	/// Install all packages.
-	#[command(arg_required_else_help = true)]
 	Install,
 	/// List all packages.
-	#[command(arg_required_else_help = true)]
 	List,
 	/// Upgrade all packages.
-	#[command(arg_required_else_help = true)]
 	Upgrade,
 }
 
