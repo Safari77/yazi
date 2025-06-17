@@ -9,11 +9,11 @@ pub struct TabProxy;
 
 impl TabProxy {
 	pub fn cd(target: &Url) {
-		emit!(Call(Cmd::args("mgr:cd", [target])));
+		emit!(Call(Cmd::args("mgr:cd", [target]).with("raw", true)));
 	}
 
 	pub fn reveal(target: &Url) {
-		emit!(Call(Cmd::args("mgr:reveal", [target]).with("no-dummy", true)));
+		emit!(Call(Cmd::args("mgr:reveal", [target]).with("raw", true).with("no-dummy", true)));
 	}
 
 	pub fn arrow(step: impl Into<Cow<'static, str>>) {
