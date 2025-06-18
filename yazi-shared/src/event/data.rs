@@ -1,8 +1,9 @@
 use std::{any::Any, borrow::Cow, collections::HashMap};
 
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize, de};
 
-use crate::{Id, OrderedFloat, url::{Url, UrnBuf}};
+use crate::{Id, url::{Url, UrnBuf}};
 
 // --- Data
 #[derive(Debug, Serialize, Deserialize)]
@@ -134,13 +135,15 @@ pub enum DataKey {
 	Boolean(bool),
 	#[serde(deserialize_with = "Self::deserialize_integer")]
 	Integer(i64),
-	Number(OrderedFloat),
+	Number(OrderedFloat<f64>),
 	String(Cow<'static, str>),
 	Id(Id),
 	#[serde(skip_deserializing)]
 	Url(Url),
 	#[serde(skip_deserializing)]
 	Urn(UrnBuf),
+	#[serde(skip)]
+	Bytes(Vec<u8>),
 }
 
 impl DataKey {
