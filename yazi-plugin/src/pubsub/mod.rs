@@ -1,13 +1,12 @@
 #![allow(clippy::module_inception)]
 
 use mlua::{IntoLua, Lua, Value};
-
-use crate::Composer;
+use yazi_binding::Composer;
 
 yazi_macro::mod_flat!(pubsub);
 
 pub(super) fn compose(lua: &Lua) -> mlua::Result<Value> {
-	Composer::make(lua, |lua, key| {
+	fn get(lua: &Lua, key: &[u8]) -> mlua::Result<Value> {
 		match key {
 			b"pub" => Pubsub::r#pub(lua)?,
 			b"pub_to" => Pubsub::pub_to(lua)?,
@@ -18,5 +17,9 @@ pub(super) fn compose(lua: &Lua) -> mlua::Result<Value> {
 			_ => return Ok(Value::Nil),
 		}
 		.into_lua(lua)
-	})
+	}
+
+	fn set(_: &Lua, _: &[u8], value: Value) -> mlua::Result<Value> { Ok(value) }
+
+	Composer::make(lua, get, set)
 }

@@ -136,7 +136,7 @@ impl<'a> Executor<'a> {
 		on!(ACTIVE, sort, &self.app.cx.tasks);
 
 		// Tabs
-		on!(TABS, create);
+		on!(TABS, create); // TODO: use `tab_create` instead
 		on!(TABS, close);
 		on!(TABS, switch);
 		on!(TABS, swap);
@@ -154,11 +154,6 @@ impl<'a> Executor<'a> {
 		macro_rules! on {
 			($name:ident) => {
 				if cmd.name == stringify!($name) {
-					return self.app.cx.tasks.$name(cmd);
-				}
-			};
-			($name:ident, $alias:literal) => {
-				if cmd.name == $alias {
 					return self.app.cx.tasks.$name(cmd);
 				}
 			};
@@ -249,11 +244,7 @@ impl<'a> Executor<'a> {
 					_ => {}
 				}
 			}
-			InputMode::Insert => match cmd.name.as_ref() {
-				"complete" if cmd.bool("trigger") => return self.app.cx.cmp.trigger(cmd),
-				_ => {}
-			},
-			InputMode::Replace => {}
+			InputMode::Insert | InputMode::Replace => {}
 		};
 
 		self.app.cx.input.execute(cmd)

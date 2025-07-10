@@ -4,11 +4,12 @@ use tokio::{pin, task::JoinHandle};
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use tokio_util::sync::CancellationToken;
 use yazi_adapter::ADAPTOR;
-use yazi_config::YAZI;
+use yazi_config::{LAYOUT, YAZI};
 use yazi_fs::{File, Files, FilesOp, cha::Cha};
 use yazi_macro::render;
-use yazi_plugin::{external::Highlighter, isolate, utils::PreviewLock};
-use yazi_shared::{MIME_DIR, url::Url};
+use yazi_parser::tab::PreviewLock;
+use yazi_plugin::{external::Highlighter, isolate};
+use yazi_shared::{MIME_DIR, SStr, url::Url};
 
 #[derive(Default)]
 pub struct Preview {
@@ -20,7 +21,7 @@ pub struct Preview {
 }
 
 impl Preview {
-	pub fn go(&mut self, file: File, mime: Cow<'static, str>, force: bool) {
+	pub fn go(&mut self, file: File, mime: SStr, force: bool) {
 		if mime.is_empty() {
 			return; // Wait till mimetype is resolved to avoid flickering
 		} else if !force && self.same_lock(&file, &mime) {
@@ -87,16 +88,16 @@ impl Preview {
 	}
 
 	#[inline]
-	pub fn same_url(&self, url: &Url) -> bool { self.lock.as_ref().is_some_and(|l| *url == l.url) }
+	pub fn same_url(&self, url: &Url) -> bool { matches!(&self.lock, Some(l) if l.url == *url) }
 
 	#[inline]
 	pub fn same_file(&self, file: &File, mime: &str) -> bool {
 		self.same_url(&file.url)
-			&& self.lock.as_ref().is_some_and(|l| file.cha.hits(l.cha) && mime == l.mime)
+			&& matches!(&self.lock , Some(l) if l.cha.hits(file.cha) && l.mime == mime && *l.area == LAYOUT.get().preview)
 	}
 
 	#[inline]
 	pub fn same_lock(&self, file: &File, mime: &str) -> bool {
-		self.same_file(file, mime) && self.lock.as_ref().is_some_and(|l| self.skip == l.skip)
+		self.same_file(file, mime) && matches!(&self.lock, Some(l) if l.skip == self.skip)
 	}
 }

@@ -36,7 +36,7 @@ impl Watcher {
 		};
 
 		let config = notify::Config::default().with_poll_interval(Duration::from_millis(500));
-		if yazi_adapter::WSL.get() {
+		if yazi_adapter::WSL.get() || cfg!(target_os = "netbsd") {
 			tokio::spawn(Self::fan_in(in_rx, PollWatcher::new(handler, config).unwrap()));
 		} else {
 			tokio::spawn(Self::fan_in(in_rx, RecommendedWatcher::new(handler, config).unwrap()));
@@ -51,9 +51,8 @@ impl Watcher {
 		Self { in_tx, out_tx }
 	}
 
-	pub(super) fn watch(&mut self, mut new: HashSet<&Url>) {
-		new.retain(|&u| u.is_regular());
-		self.in_tx.send(new.into_iter().cloned().collect()).ok();
+	pub(super) fn watch<'a>(&mut self, it: impl Iterator<Item = &'a Url>) {
+		self.in_tx.send(it.filter(|u| u.is_regular()).cloned().collect()).ok();
 	}
 
 	pub(super) fn push_files(&self, urls: Vec<Url>) {

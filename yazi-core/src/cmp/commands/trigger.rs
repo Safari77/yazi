@@ -1,42 +1,34 @@
-use std::{borrow::Cow, ffi::OsString, mem, path::{MAIN_SEPARATOR_STR, Path, PathBuf}};
+use std::{ffi::OsString, mem, path::{MAIN_SEPARATOR_STR, Path, PathBuf}};
 
 use tokio::fs;
 use yazi_fs::{CWD, expand_path};
 use yazi_macro::{emit, render};
+use yazi_parser::cmp::TriggerOpt;
 use yazi_proxy::options::CmpItem;
-use yazi_shared::{Id, event::{Cmd, CmdCow, Data}, natsort};
+use yazi_shared::{event::Cmd, natsort};
 
 use crate::cmp::Cmp;
 
-struct Opt {
-	word:   Cow<'static, str>,
-	ticket: Id,
-}
-
-impl From<CmdCow> for Opt {
-	fn from(mut c: CmdCow) -> Self {
-		Self {
-			word:   c.take_first_str().unwrap_or_default(),
-			ticket: c.get("ticket").and_then(Data::as_id).unwrap_or_default(),
-		}
-	}
-}
-
 impl Cmp {
 	#[yazi_codegen::command]
-	pub fn trigger(&mut self, opt: Opt) {
-		if opt.ticket < self.ticket {
-			return;
+	pub fn trigger(&mut self, opt: TriggerOpt) {
+		if let Some(t) = opt.ticket {
+			if t < self.ticket {
+				return;
+			}
+			self.ticket = t;
 		}
 
-		self.ticket = opt.ticket;
 		let Some((parent, word)) = Self::split_path(&opt.word) else {
 			return self.close(false);
 		};
 
 		if self.caches.contains_key(&parent) {
 			return self.show(
-				Cmd::default().with_any("cache-name", parent).with("word", word).with("ticket", opt.ticket),
+				Cmd::default()
+					.with_any("cache-name", parent)
+					.with("word", word)
+					.with("ticket", self.ticket),
 			);
 		}
 
