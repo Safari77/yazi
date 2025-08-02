@@ -1,27 +1,32 @@
-use std::{borrow::Cow, env, ffi::{OsStr, OsString}, future::Future, io, path::{Component, Path, PathBuf}};
+use std::{borrow::Cow, env, ffi::{OsStr, OsString}, future::Future, io, path::{Path, PathBuf}};
 
-use yazi_shared::url::Url;
+use anyhow::{Result, bail};
+use yazi_shared::url::{Loc, Url};
 
 use crate::{CWD, services};
 
-#[inline]
-pub fn clean_url(url: &Url) -> Url { Url::from(clean_path(url)) }
+pub fn clean_url<'a>(url: impl Into<Cow<'a, Url>>) -> Cow<'a, Url> {
+	let url = url.into();
+	let path = clean_path(&url.loc);
 
-#[inline]
-pub fn clean_path(path: impl AsRef<Path>) -> PathBuf { _clean_path(path.as_ref()) }
+	if path.as_os_str() == url.loc.as_os_str() {
+		url
+	} else {
+		url.with(Loc::with(&clean_path(url.loc.base()), path)).into()
+	}
+}
 
-fn _clean_path(path: &Path) -> PathBuf {
+fn clean_path(path: &Path) -> PathBuf {
+	use std::path::Component::*;
+
 	let mut out = vec![];
 	for c in path.components() {
 		match c {
-			Component::CurDir => {}
-			Component::ParentDir => match out.last() {
-				Some(Component::RootDir) => {}
-				Some(Component::Normal(_)) => _ = out.pop(),
-				None
-				| Some(Component::CurDir)
-				| Some(Component::ParentDir)
-				| Some(Component::Prefix(_)) => out.push(c),
+			CurDir => {}
+			ParentDir => match out.last() {
+				Some(RootDir) => {}
+				Some(Normal(_)) => _ = out.pop(),
+				None | Some(CurDir) | Some(ParentDir) | Some(Prefix(_)) => out.push(c),
 			},
 			c => out.push(c),
 		}
@@ -30,10 +35,22 @@ fn _clean_path(path: &Path) -> PathBuf {
 	if out.is_empty() { PathBuf::from(".") } else { out.iter().collect() }
 }
 
+// FIXME: VFS
 #[inline]
-pub fn expand_path(p: impl AsRef<Path>) -> PathBuf { _expand_path(p.as_ref()) }
+pub fn expand_path(p: impl AsRef<Path>) -> PathBuf {
+	expand_url(Url::from(p.as_ref())).into_owned().loc.into_path()
+}
 
-fn _expand_path(p: &Path) -> PathBuf {
+#[inline]
+pub fn expand_url<'a>(url: impl Into<Cow<'a, Url>>) -> Cow<'a, Url> {
+	let cow: Cow<'a, Url> = url.into();
+	match _expand_url(&cow) {
+		Cow::Borrowed(_) => cow,
+		Cow::Owned(url) => url.into(),
+	}
+}
+
+fn _expand_url(url: &Url) -> Cow<'_, Url> {
 	// ${HOME} or $HOME
 	#[cfg(unix)]
 	let re = regex::bytes::Regex::new(r"\$(?:\{([^}]+)\}|([a-zA-Z\d_]+))").unwrap();
@@ -42,7 +59,16 @@ fn _expand_path(p: &Path) -> PathBuf {
 	#[cfg(windows)]
 	let re = regex::bytes::Regex::new(r"%([^%]+)%").unwrap();
 
-	let b = re.replace_all(p.as_os_str().as_encoded_bytes(), |caps: &regex::bytes::Captures| {
+	let b = url.loc.as_os_str().as_encoded_bytes();
+	let local = !url.scheme.is_virtual();
+
+	// Windows paths that only have a drive letter but no root, e.g. "D:"
+	#[cfg(windows)]
+	if local && b.len() == 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+		return url.with(format!(r"{}:\", b[0].to_ascii_uppercase() as char)).into();
+	}
+
+	let b = re.replace_all(b, |caps: &regex::bytes::Captures| {
 		let name = caps.get(2).or_else(|| caps.get(1)).unwrap();
 		str::from_utf8(name.as_bytes())
 			.ok()
@@ -50,32 +76,30 @@ fn _expand_path(p: &Path) -> PathBuf {
 			.map_or_else(|| caps.get(0).unwrap().as_bytes().to_owned(), |s| s.into_encoded_bytes())
 	});
 
-	// Windows paths that only have a drive letter but no root, e.g. "D:"
-	#[cfg(windows)]
-	if b.len() == 2 {
-		if b[1] == b':' && b[0].is_ascii_alphabetic() {
-			return PathBuf::from(format!("{}:\\", b[0].to_ascii_uppercase() as char));
+	let path: Cow<_> = unsafe {
+		match b {
+			Cow::Borrowed(b) => Path::new(OsStr::from_encoded_bytes_unchecked(b)).into(),
+			Cow::Owned(b) => PathBuf::from(OsString::from_encoded_bytes_unchecked(b)).into(),
 		}
-	}
+	};
 
-	let p = unsafe { Path::new(OsStr::from_encoded_bytes_unchecked(b.as_ref())) };
-	if let Ok(rest) = p.strip_prefix("~") {
-		clean_path(dirs::home_dir().unwrap_or_default().join(rest))
-	} else if p.is_absolute() {
-		clean_path(p)
+	if let Some(rest) = path.strip_prefix("~").ok().filter(|_| local) {
+		url.with(clean_path(&dirs::home_dir().unwrap_or_default().join(rest))).into()
+	} else if path.is_absolute() {
+		url.with(clean_path(&path)).into()
 	} else {
-		clean_path(CWD.load().join(p))
+		clean_url(CWD.load().join(path))
 	}
 }
 
-pub fn skip_path(p: &Path, u: usize) -> &Path {
-	let mut it = p.components();
-	for _ in 0..u {
+pub fn skip_url(url: &Url, n: usize) -> Cow<'_, OsStr> {
+	let mut it = url.components();
+	for _ in 0..n {
 		if it.next().is_none() {
-			return Path::new("");
+			return OsStr::new("").into();
 		}
 	}
-	it.as_path()
+	it.os_str()
 }
 
 pub async fn unique_name<F>(u: Url, append: F) -> io::Result<Url>
@@ -128,34 +152,29 @@ async fn _unique_name(mut url: Url, append: bool) -> io::Result<Url> {
 	Ok(url)
 }
 
-// Parameters
-// * `path`: The absolute path(contains no `/./`) to get relative path.
-// * `root`: The absolute path(contains no `/./`) to be compared.
-//
-// Return
-// * Unix: The relative format to `root` of `path`.
-// * Windows: The relative format to `root` of `path`; or `path` itself when
-//   `path` and `root` are both under different disk drives.
-pub fn path_relative_to<'a>(path: &'a Path, root: &Path) -> Cow<'a, Path> {
-	assert!(path.is_absolute());
-	assert!(root.is_absolute());
-	let mut p_comps = path.components();
-	let mut r_comps = root.components();
+pub fn url_relative_to<'a>(from: &Url, to: &'a Url) -> Result<Cow<'a, Url>> {
+	use yazi_shared::url::Component::*;
 
-	// 1. Ensure that the two paths have the same prefix.
-	// 2. Strips any common prefix the two paths do have.
-	//
-	// NOTE:
-	// Prefixes are platform dependent,
-	// but different prefixes would for example indicate paths for different drives
-	// on Windows.
-	let (p_head, r_head) = loop {
-		use std::path::Component::*;
-		match (p_comps.next(), r_comps.next()) {
-			(Some(RootDir), Some(RootDir)) => (),
-			(Some(Prefix(a)), Some(Prefix(b))) if a == b => (),
-			(Some(Prefix(_) | RootDir), _) | (_, Some(Prefix(_) | RootDir)) => {
-				return Cow::from(path);
+	if from.is_absolute() != to.is_absolute() {
+		return if to.is_absolute() {
+			Ok(to.into())
+		} else {
+			bail!("Urls must be both absolute or both relative: {from:?} and {to:?}");
+		};
+	}
+
+	if from.covariant(to) {
+		return Ok(to.with(Path::new(".")).into());
+	}
+
+	let (mut f_it, mut t_it) = (from.components(), to.components());
+	let (f_head, t_head) = loop {
+		match (f_it.next(), t_it.next()) {
+			(Some(Scheme(a)), Some(Scheme(b))) if a.covariant(b) => {}
+			(Some(RootDir), Some(RootDir)) => {}
+			(Some(Prefix(a)), Some(Prefix(b))) if a == b => {}
+			(Some(Scheme(_) | Prefix(_) | RootDir), _) | (_, Some(Scheme(_) | Prefix(_) | RootDir)) => {
+				return Ok(to.into());
 			}
 			(None, None) => break (None, None),
 			(a, b) if a != b => break (a, b),
@@ -163,14 +182,11 @@ pub fn path_relative_to<'a>(path: &'a Path, root: &Path) -> Cow<'a, Path> {
 		}
 	};
 
-	let p_comps = p_head.into_iter().chain(p_comps);
-	let walk_up = r_head.into_iter().chain(r_comps).map(|_| Component::ParentDir);
+	let dots = f_head.into_iter().chain(f_it).map(|_| ParentDir);
+	let rest = t_head.into_iter().chain(t_it);
 
-	let mut buf = PathBuf::new();
-	buf.extend(walk_up);
-	buf.extend(p_comps);
-
-	Cow::from(buf)
+	let buf: PathBuf = dots.chain(rest).collect();
+	Ok(to.with(buf).into())
 }
 
 #[cfg(windows)]
@@ -196,35 +212,60 @@ pub fn backslash_to_slash(p: &Path) -> Cow<'_, Path> {
 
 #[cfg(test)]
 mod tests {
-	use std::{borrow::Cow, path::Path};
+	use std::borrow::Cow;
 
-	use super::path_relative_to;
+	use yazi_shared::url::Url;
 
-	#[cfg(unix)]
+	use super::url_relative_to;
+
 	#[test]
 	fn test_path_relative_to() {
-		fn assert(path: &str, root: &str, res: &str) {
-			assert_eq!(path_relative_to(Path::new(path), Path::new(root)), Cow::Borrowed(Path::new(res)));
+		fn assert(from: &str, to: &str, ret: &str) {
+			assert_eq!(
+				url_relative_to(&Url::try_from(from).unwrap(), &Url::try_from(to).unwrap()).unwrap(),
+				Cow::Owned(Url::try_from(ret).unwrap())
+			);
 		}
 
-		assert("/a/b", "/a/b/c", "../");
-		assert("/a/b/c", "/a/b", "c");
-		assert("/a/b/c", "/a/b/d", "../c");
-		assert("/a", "/a/b/c", "../../");
-		assert("/a/a/b", "/a/b/b", "../../a/b");
-	}
+		#[cfg(unix)]
+		{
+			// Same urls
+			assert("", "", ".");
+			assert(".", ".", ".");
+			assert("/a", "/a", ".");
+			assert("regular:///", "/", ".");
+			assert("regular://", "regular://", ".");
+			assert("regular://", "search://kw/", "search://kw/.");
+			assert("regular:///b", "search://kw//b", "search://kw/.");
 
-	#[cfg(windows)]
-	#[test]
-	fn test_path_relative_to() {
-		fn assert(path: &str, root: &str, res: &str) {
-			assert_eq!(path_relative_to(Path::new(path), Path::new(root)), Cow::Borrowed(Path::new(res)));
+			// Relative urls
+			assert("foo", "bar", "../bar");
+
+			// Absolute urls
+			assert("/a/b/c", "/a/b", "../");
+			assert("/a/b", "/a/b/c", "c");
+			assert("/a/b/d", "/a/b/c", "../c");
+			assert("/a/b/c", "/a", "../../");
+			assert("/a/b/b", "/a/a/b", "../../a/b");
+
+			assert("regular:///a/b", "regular:///a/b/c", "c");
+			assert("/a/b/c/", "search://kw//a/d/", "search://kw/../../d");
+			assert("search://kw//a/b/c", "search://kw//a/b", "search://kw/../");
+
+			// Different schemes
+			assert("", "sftp://test/", "sftp://test/");
+			assert("a", "sftp://test/", "sftp://test/");
+			assert("a", "sftp://test/b", "sftp://test/b");
+			assert("/a", "sftp://test//b", "sftp://test//b");
+			assert("sftp://test//a/b", "sftp://test//a/d", "sftp://test/../d");
 		}
-
-		assert("C:\\a\\b", "C:\\a\\b\\c", "..\\");
-		assert("C:\\a\\b\\c", "C:\\a\\b", "c");
-		assert("C:\\a\\b\\c", "C:\\a\\b\\d", "..\\c");
-		assert("C:\\a", "C:\\a\\b\\c", "..\\..\\");
-		assert("C:\\a\\a\\b", "C:\\a\\b\\b", "..\\..\\a\\b");
+		#[cfg(windows)]
+		{
+			assert(r"C:\a\b\c", r"C:\a\b", r"..\");
+			assert(r"C:\a\b", r"C:\a\b\c", "c");
+			assert(r"C:\a\b\d", r"C:\a\b\c", r"..\c");
+			assert(r"C:\a\b\c", r"C:\a", r"..\..\");
+			assert(r"C:\a\b\b", r"C:\a\a\b", r"..\..\a\b");
+		}
 	}
 }

@@ -1,32 +1,32 @@
-use std::{cmp, ffi::{OsStr, OsString}, fmt::{self, Debug, Formatter}, hash::{Hash, Hasher}, ops::Deref, path::{Path, PathBuf}};
+use std::{borrow::Cow, cmp, ffi::{OsStr, OsString}, fmt::{self, Debug, Formatter}, hash::{Hash, Hasher}, ops::Deref, path::{Path, PathBuf}};
 
 use crate::url::{Urn, UrnBuf};
 
 #[derive(Clone, Default)]
 pub struct Loc {
-	path: PathBuf,
-	urn:  usize,
-	name: usize,
+	inner: PathBuf,
+	urn:   usize,
+	name:  usize,
 }
-
-unsafe impl Send for Loc {}
-
-unsafe impl Sync for Loc {}
 
 impl Deref for Loc {
 	type Target = PathBuf;
 
-	fn deref(&self) -> &Self::Target { &self.path }
+	fn deref(&self) -> &Self::Target { &self.inner }
+}
+
+impl AsRef<Path> for Loc {
+	fn as_ref(&self) -> &Path { &self.inner }
 }
 
 impl PartialEq for Loc {
-	fn eq(&self, other: &Self) -> bool { self.path == other.path }
+	fn eq(&self, other: &Self) -> bool { self.inner == other.inner }
 }
 
 impl Eq for Loc {}
 
 impl Ord for Loc {
-	fn cmp(&self, other: &Self) -> cmp::Ordering { self.path.cmp(&other.path) }
+	fn cmp(&self, other: &Self) -> cmp::Ordering { self.inner.cmp(&other.inner) }
 }
 
 impl PartialOrd for Loc {
@@ -34,24 +34,32 @@ impl PartialOrd for Loc {
 }
 
 impl Hash for Loc {
-	fn hash<H: Hasher>(&self, state: &mut H) { self.path.hash(state) }
+	fn hash<H: Hasher>(&self, state: &mut H) { self.inner.hash(state) }
 }
 
 impl Debug for Loc {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
 		f.debug_struct("Loc")
-			.field("path", &self.path)
+			.field("path", &self.inner)
 			.field("urn", &self.urn())
 			.field("name", &self.name())
 			.finish()
 	}
 }
 
-impl Loc {
-	pub fn new(path: PathBuf) -> Self {
+impl From<OsString> for Loc {
+	fn from(value: OsString) -> Self { Self::from(PathBuf::from(value)) }
+}
+
+impl From<String> for Loc {
+	fn from(value: String) -> Self { Self::from(PathBuf::from(value)) }
+}
+
+impl From<PathBuf> for Loc {
+	fn from(path: PathBuf) -> Self {
 		let Some(name) = path.file_name() else {
 			let urn = path.as_os_str().len();
-			return Self { path, urn, name: 0 };
+			return Self { inner: path, urn, name: 0 };
 		};
 
 		let name_len = name.len();
@@ -62,15 +70,25 @@ impl Loc {
 		let mut bytes = path.into_os_string().into_encoded_bytes();
 		bytes.truncate(name_len + prefix_len as usize);
 		Self {
-			path: PathBuf::from(unsafe { OsString::from_encoded_bytes_unchecked(bytes) }),
-			urn:  name_len,
-			name: name_len,
+			inner: PathBuf::from(unsafe { OsString::from_encoded_bytes_unchecked(bytes) }),
+			urn:   name_len,
+			name:  name_len,
 		}
 	}
+}
 
-	pub fn from(base: &Path, path: PathBuf) -> Self {
-		let mut loc = Self::new(path);
-		loc.urn = loc.path.strip_prefix(base).unwrap_or(&loc.path).as_os_str().len();
+impl From<Cow<'_, Path>> for Loc {
+	fn from(value: Cow<'_, Path>) -> Self { Self::from(value.into_owned()) }
+}
+
+impl<T: ?Sized + AsRef<OsStr>> From<&T> for Loc {
+	fn from(value: &T) -> Self { Self::from(value.as_ref().to_os_string()) }
+}
+
+impl Loc {
+	pub fn with(base: &Path, path: PathBuf) -> Self {
+		let mut loc = Self::from(path);
+		loc.urn = loc.inner.strip_prefix(base).unwrap_or(&loc.inner).as_os_str().len();
 		loc
 	}
 
@@ -108,7 +126,7 @@ impl Loc {
 		}
 
 		self.name = name.len();
-		self.path.set_file_name(name);
+		self.inner.set_file_name(name);
 	}
 
 	#[inline]
@@ -121,19 +139,22 @@ impl Loc {
 	}
 
 	#[inline]
+	pub fn has_base(&self) -> bool { self.bytes().len() != self.urn }
+
+	#[inline]
 	pub fn rebase(&self, parent: &Path) -> Self {
 		debug_assert!(self.urn == self.name);
 		let path = parent.join(self.name());
 
 		debug_assert!(path.file_name().is_some_and(|s| s.len() == self.name));
-		Self { path, urn: self.name, name: self.name }
+		Self { inner: path, urn: self.name, name: self.name }
 	}
 
 	#[inline]
-	pub fn into_path(self) -> PathBuf { self.path }
+	pub fn into_path(self) -> PathBuf { self.inner }
 
 	#[inline]
-	fn bytes(&self) -> &[u8] { self.path.as_os_str().as_encoded_bytes() }
+	fn bytes(&self) -> &[u8] { self.inner.as_os_str().as_encoded_bytes() }
 }
 
 #[cfg(test)]
@@ -144,17 +165,17 @@ mod tests {
 
 	#[test]
 	fn test_new() {
-		let loc = Loc::new("/".into());
+		let loc: Loc = Path::new("/").into();
 		assert_eq!(loc.urn(), Urn::new("/"));
 		assert_eq!(loc.name(), OsStr::new(""));
 		assert_eq!(loc.base(), Path::new(""));
 
-		let loc = Loc::new("/root".into());
+		let loc: Loc = Path::new("/root").into();
 		assert_eq!(loc.urn(), Urn::new("root"));
 		assert_eq!(loc.name(), OsStr::new("root"));
 		assert_eq!(loc.base(), Path::new("/"));
 
-		let loc = Loc::new("/root/code/foo/".into());
+		let loc: Loc = Path::new("/root/code/foo/").into();
 		assert_eq!(loc.urn(), Urn::new("foo"));
 		assert_eq!(loc.name(), OsStr::new("foo"));
 		assert_eq!(loc.base(), Path::new("/root/code/"));
@@ -162,17 +183,17 @@ mod tests {
 
 	#[test]
 	fn test_from() {
-		let loc = Loc::from(Path::new("/"), "/".into());
+		let loc = Loc::with(Path::new("/"), "/".into());
 		assert_eq!(loc.urn().as_os_str(), OsStr::new(""));
 		assert_eq!(loc.name(), OsStr::new(""));
 		assert_eq!(loc.base().as_os_str(), OsStr::new("/"));
 
-		let loc = Loc::from(Path::new("/root/"), "/root/code/".into());
+		let loc = Loc::with(Path::new("/root/"), "/root/code/".into());
 		assert_eq!(loc.urn().as_os_str(), OsStr::new("code"));
 		assert_eq!(loc.name(), OsStr::new("code"));
 		assert_eq!(loc.base().as_os_str(), OsStr::new("/root/"));
 
-		let loc = Loc::from(Path::new("/root//"), "/root/code/foo//".into());
+		let loc = Loc::with(Path::new("/root//"), "/root/code/foo//".into());
 		assert_eq!(loc.urn().as_os_str(), OsStr::new("code/foo"));
 		assert_eq!(loc.name(), OsStr::new("foo"));
 		assert_eq!(loc.base().as_os_str(), OsStr::new("/root/"));
@@ -180,7 +201,7 @@ mod tests {
 
 	#[test]
 	fn test_set_name() {
-		let mut loc = Loc::from(Path::new("/root"), "/root/code/foo/".into());
+		let mut loc = Loc::with(Path::new("/root"), "/root/code/foo/".into());
 		assert_eq!(loc.urn().as_os_str(), OsStr::new("code/foo"));
 		assert_eq!(loc.name(), OsStr::new("foo"));
 		assert_eq!(loc.base().as_os_str(), OsStr::new("/root/"));
