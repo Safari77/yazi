@@ -4,6 +4,7 @@ use anyhow::Result;
 use tokio::{select, time};
 use yazi_boot::ARGS;
 use yazi_config::popup::ConfirmCfg;
+use yazi_dds::spark::SparkKind;
 use yazi_macro::{emit, succ};
 use yazi_parser::mgr::{OpenOpt, QuitOpt};
 use yazi_proxy::ConfirmProxy;
@@ -60,8 +61,8 @@ impl Actor for Quit {
 		succ!();
 	}
 
-	fn hook(cx: &Ctx, _opt: &Self::Options) -> Option<&'static str> {
-		Some("key-quit").filter(|_| cx.source().is_key())
+	fn hook(cx: &Ctx, _opt: &Self::Options) -> Option<SparkKind> {
+		Some(SparkKind::KeyQuit).filter(|_| cx.source().is_key())
 	}
 }
 
@@ -75,7 +76,7 @@ impl Quit {
 		}
 
 		let paths = selected.fold(OsString::new(), |mut s, u| {
-			s.push(u.as_os_str());
+			s.push(u.os_str());
 			s.push("\n");
 			s
 		});
