@@ -1,12 +1,12 @@
-use std::{collections::HashMap, ops::{Deref, DerefMut}};
+use std::{collections::HashMap, iter, ops::{Deref, DerefMut}};
 
-use yazi_shared::url::Url;
+use yazi_shared::url::{Url, UrlBuf};
 
 #[derive(Default)]
-pub struct Linked(HashMap<Url, Url> /* from ==> to */);
+pub struct Linked(HashMap<UrlBuf, UrlBuf> /* from ==> to */);
 
 impl Deref for Linked {
-	type Target = HashMap<Url, Url>;
+	type Target = HashMap<UrlBuf, UrlBuf>;
 
 	fn deref(&self) -> &Self::Target { &self.0 }
 }
@@ -16,27 +16,26 @@ impl DerefMut for Linked {
 }
 
 impl Linked {
-	pub fn from_dir<'a, 'b>(&'a self, url: &'b Url) -> Box<dyn Iterator<Item = &'a Url> + 'b>
+	pub fn from_dir<'a, 'b>(&'a self, url: &'b UrlBuf) -> Box<dyn Iterator<Item = &'a UrlBuf> + 'b>
 	where
 		'a: 'b,
 	{
-		if let Some(to) = self.get(url) {
+		if url.scheme.is_virtual() {
+			Box::new(iter::empty())
+		} else if let Some(to) = self.get(url) {
 			Box::new(self.iter().filter(move |(k, v)| *v == to && *k != url).map(|(k, _)| k))
 		} else {
 			Box::new(self.iter().filter(move |(_, v)| *v == url).map(|(k, _)| k))
 		}
 	}
 
-	pub fn from_file(&self, url: &Url) -> Vec<Url> {
-		if self.is_empty() {
-			return vec![];
+	pub fn from_file(&self, url: Url) -> Vec<UrlBuf> {
+		if url.scheme.is_virtual() {
+			vec![]
+		} else if let Some((parent, urn)) = url.pair() {
+			self.from_dir(&parent).map(|u| u.join(&urn)).collect()
+		} else {
+			vec![]
 		}
-
-		let Some(p) = url.parent_url() else {
-			return vec![];
-		};
-
-		let name = url.file_name().unwrap();
-		self.from_dir(&p).map(|u| u.join(name)).collect()
 	}
 }

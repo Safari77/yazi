@@ -1,30 +1,33 @@
-use std::{collections::HashSet, ops::Deref};
+use std::ops::Deref;
 
+use hashbrown::HashSet;
 use yazi_dds::Pubsub;
 use yazi_fs::FilesOp;
 use yazi_macro::err;
-use yazi_shared::url::{CovUrl, Url};
+use yazi_shared::url::{Url, UrlBuf, UrlBufCov, UrlCov};
 
 #[derive(Debug, Default)]
 pub struct Yanked {
 	pub cut: bool,
-	urls:    HashSet<CovUrl>,
+	urls:    HashSet<UrlBufCov>,
 
 	version:  u64,
 	revision: u64,
 }
 
 impl Deref for Yanked {
-	type Target = HashSet<CovUrl>;
+	type Target = HashSet<UrlBufCov>;
 
 	fn deref(&self) -> &Self::Target { &self.urls }
 }
 
 impl Yanked {
-	pub fn new(cut: bool, urls: HashSet<CovUrl>) -> Self { Self { cut, urls, ..Default::default() } }
+	pub fn new(cut: bool, urls: HashSet<UrlBufCov>) -> Self {
+		Self { cut, urls, ..Default::default() }
+	}
 
-	pub fn remove(&mut self, url: &Url) {
-		if self.urls.remove(CovUrl::new(url)) {
+	pub fn remove<'a>(&mut self, url: impl Into<Url<'a>>) {
+		if self.urls.remove(&UrlCov::new(url)) {
 			self.revision += 1;
 		}
 	}
@@ -39,9 +42,11 @@ impl Yanked {
 	}
 
 	#[inline]
-	pub fn contains(&self, url: impl AsRef<Url>) -> bool { self.urls.contains(CovUrl::new(&url)) }
+	pub fn contains<'a>(&self, url: impl Into<Url<'a>>) -> bool {
+		self.urls.contains(&UrlCov::new(url))
+	}
 
-	pub fn contains_in(&self, dir: &Url) -> bool {
+	pub fn contains_in(&self, dir: &UrlBuf) -> bool {
 		self.urls.iter().any(|u| {
 			let mut it = u.components();
 			it.next_back().is_some()
@@ -60,7 +65,7 @@ impl Yanked {
 
 		if !addition.is_empty() {
 			let old = self.urls.len();
-			self.urls.extend(addition.into_iter().map(CovUrl));
+			self.urls.extend(addition.into_iter().map(UrlBufCov));
 			self.revision += (old != self.urls.len()) as u64;
 		}
 	}

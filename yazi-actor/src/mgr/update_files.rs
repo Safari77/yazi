@@ -16,7 +16,7 @@ impl Actor for UpdateFiles {
 
 	fn act(cx: &mut Ctx, opt: Self::Options) -> Result<Data> {
 		let revision = cx.current().files.revision;
-		let linked: Vec<_> = LINKED.read().from_dir(opt.op.cwd()).map(|u| opt.op.rebase(u)).collect();
+		let linked: Vec<_> = LINKED.read().from_dir(opt.op.cwd()).map(|u| opt.op.chdir(u)).collect();
 		for op in [opt.op].into_iter().chain(linked) {
 			cx.mgr.yanked.apply_op(&op);
 			Self::update_tab(cx, op).ok();
@@ -85,7 +85,12 @@ impl UpdateFiles {
 
 	fn update_hovered(cx: &mut Ctx, op: FilesOp) -> Result<Data> {
 		let (id, url) = (cx.tab().id, op.cwd());
-		let folder = cx.tab_mut().history.entry(url.clone()).or_insert_with(|| Folder::from(url));
+		let (_, folder) = cx
+			.tab_mut()
+			.history
+			.raw_entry_mut()
+			.from_key(url)
+			.or_insert_with(|| (url.clone(), Folder::from(url)));
 
 		if folder.update_pub(id, op) {
 			act!(mgr:peek, cx, true)?;
@@ -101,8 +106,10 @@ impl UpdateFiles {
 
 		tab
 			.history
-			.entry(op.cwd().clone())
-			.or_insert_with(|| Folder::from(op.cwd()))
+			.raw_entry_mut()
+			.from_key(op.cwd())
+			.or_insert_with(|| (op.cwd().clone(), Folder::from(op.cwd())))
+			.1
 			.update_pub(tab.id, op);
 
 		if leave {

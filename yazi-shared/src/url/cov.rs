@@ -1,54 +1,91 @@
 use std::{hash::{Hash, Hasher}, ops::Deref};
 
+use hashbrown::Equivalent;
 use serde::{Deserialize, Serialize};
 
-use crate::url::Url;
+use crate::url::{Url, UrlBuf, UrlCow};
 
-#[derive(Clone, Debug, Deserialize, Eq, Serialize)]
-#[repr(transparent)]
-pub struct CovUrl(pub Url);
+#[derive(Clone)]
+pub struct UrlCov<'a>(Url<'a>);
 
-impl Deref for CovUrl {
-	type Target = Url;
+impl<'a> Deref for UrlCov<'a> {
+	type Target = Url<'a>;
 
 	fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-impl AsRef<Url> for CovUrl {
-	fn as_ref(&self) -> &Url { &self.0 }
+impl<'a> From<&'a UrlBufCov> for UrlCov<'a> {
+	fn from(value: &'a UrlBufCov) -> Self { Self(value.0.as_url()) }
 }
 
-impl From<Url> for CovUrl {
-	fn from(value: Url) -> Self { Self(value) }
+impl PartialEq<UrlBufCov> for UrlCov<'_> {
+	fn eq(&self, other: &UrlBufCov) -> bool { self.0.covariant(other.0.as_url()) }
 }
 
-impl From<CovUrl> for Url {
-	fn from(value: CovUrl) -> Self { value.0 }
-}
-
-impl Hash for CovUrl {
+impl Hash for UrlCov<'_> {
 	fn hash<H: Hasher>(&self, state: &mut H) {
-		self.loc.hash(state);
-		if self.scheme.is_virtual() {
-			self.scheme.hash(state);
+		self.0.loc.hash(state);
+		if self.0.scheme.is_virtual() {
+			self.0.scheme.hash(state);
 		}
 	}
 }
 
-impl PartialEq for CovUrl {
+impl Equivalent<UrlBufCov> for UrlCov<'_> {
+	fn equivalent(&self, key: &UrlBufCov) -> bool { self == key }
+}
+
+impl<'a> UrlCov<'a> {
+	#[inline]
+	pub fn new(url: impl Into<Url<'a>>) -> Self { Self(url.into()) }
+}
+
+// --- Buf
+#[derive(Clone, Debug, Deserialize, Eq, Serialize)]
+pub struct UrlBufCov(pub UrlBuf);
+
+impl Deref for UrlBufCov {
+	type Target = UrlBuf;
+
+	fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl From<UrlBuf> for UrlBufCov {
+	fn from(value: UrlBuf) -> Self { Self(value) }
+}
+
+impl From<UrlBufCov> for UrlBuf {
+	fn from(value: UrlBufCov) -> Self { value.0 }
+}
+
+impl From<UrlCow<'_>> for UrlBufCov {
+	fn from(value: UrlCow<'_>) -> Self { Self(value.into_owned()) }
+}
+
+impl From<&UrlCov<'_>> for UrlBufCov {
+	fn from(value: &UrlCov<'_>) -> Self { Self(UrlBuf::from(&value.0)) }
+}
+
+impl<'a> From<&'a UrlBufCov> for Url<'a> {
+	fn from(value: &'a UrlBufCov) -> Self { value.0.as_url() }
+}
+
+impl Hash for UrlBufCov {
+	fn hash<H: Hasher>(&self, state: &mut H) { self.as_url().hash(state) }
+}
+
+impl PartialEq for UrlBufCov {
 	fn eq(&self, other: &Self) -> bool { self.covariant(other) }
 }
 
-impl PartialEq<Url> for CovUrl {
-	fn eq(&self, other: &Url) -> bool { self.covariant(other) }
+impl PartialEq<UrlBuf> for UrlBufCov {
+	fn eq(&self, other: &UrlBuf) -> bool { self.covariant(other) }
 }
 
-impl CovUrl {
+impl UrlBufCov {
 	#[inline]
-	pub fn new<T: AsRef<Url>>(u: &T) -> &Self {
-		unsafe { &*(u.as_ref() as *const Url as *const Self) }
-	}
+	pub fn as_url(&self) -> UrlCov<'_> { UrlCov::from(self) }
 
 	#[inline]
-	pub fn parent_url(&self) -> Option<CovUrl> { self.0.parent_url().map(CovUrl) }
+	pub fn parent_url(&self) -> Option<UrlBufCov> { self.0.parent_url().map(UrlBufCov) }
 }

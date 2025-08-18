@@ -9,7 +9,7 @@ use yazi_fs::{File, Files, FilesOp, cha::Cha};
 use yazi_macro::render;
 use yazi_parser::mgr::PreviewLock;
 use yazi_plugin::{external::Highlighter, isolate};
-use yazi_shared::{MIME_DIR, SStr, url::Url};
+use yazi_shared::{MIME_DIR, SStr, url::UrlBuf};
 
 #[derive(Default)]
 pub struct Preview {
@@ -38,10 +38,10 @@ impl Preview {
 
 	pub fn go_folder(&mut self, file: File, dir: Option<Cha>, force: bool) {
 		let same = self.same_file(&file, MIME_DIR);
-		let (wd, cha) = (file.url_owned(), file.cha);
+		let (wd, cha, internal) = (file.url_owned(), file.cha, file.url.is_internal());
 
 		self.go(file, Cow::Borrowed(MIME_DIR), force);
-		if same {
+		if same || !internal {
 			return;
 		}
 
@@ -88,7 +88,7 @@ impl Preview {
 	}
 
 	#[inline]
-	pub fn same_url(&self, url: &Url) -> bool { matches!(&self.lock, Some(l) if l.url == *url) }
+	pub fn same_url(&self, url: &UrlBuf) -> bool { matches!(&self.lock, Some(l) if l.url == *url) }
 
 	#[inline]
 	pub fn same_file(&self, file: &File, mime: &str) -> bool {

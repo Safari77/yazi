@@ -1,12 +1,10 @@
-use std::borrow::Cow;
-
 use mlua::{ExternalError, FromLua, IntoLua, Lua, Value};
-use yazi_fs::expand_url;
-use yazi_shared::{event::CmdCow, url::Url};
+use yazi_fs::path::expand_url;
+use yazi_shared::{event::CmdCow, url::{UrlBuf, UrlCow}};
 
 #[derive(Debug)]
 pub struct CdOpt {
-	pub target:      Url,
+	pub target:      UrlCow<'static>,
 	pub interactive: bool,
 	pub source:      CdSource,
 }
@@ -15,18 +13,24 @@ impl From<CmdCow> for CdOpt {
 	fn from(mut c: CmdCow) -> Self {
 		let mut target = c.take_first_url().unwrap_or_default();
 
-		if !c.bool("raw")
-			&& let Cow::Owned(u) = expand_url(&target)
-		{
-			target = u;
+		if !c.bool("raw") {
+			target = expand_url(target).into();
 		}
 
 		Self { target, interactive: c.bool("interactive"), source: CdSource::Cd }
 	}
 }
 
-impl From<(Url, CdSource)> for CdOpt {
-	fn from((target, source): (Url, CdSource)) -> Self { Self { target, interactive: false, source } }
+impl From<(UrlCow<'static>, CdSource)> for CdOpt {
+	fn from((target, source): (UrlCow<'static>, CdSource)) -> Self {
+		Self { target, interactive: false, source }
+	}
+}
+
+impl From<(UrlBuf, CdSource)> for CdOpt {
+	fn from((target, source): (UrlBuf, CdSource)) -> Self {
+		Self::from((UrlCow::from(target), source))
+	}
 }
 
 impl FromLua for CdOpt {

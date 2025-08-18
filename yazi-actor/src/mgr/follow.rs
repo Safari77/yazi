@@ -1,5 +1,5 @@
 use anyhow::Result;
-use yazi_fs::clean_url;
+use yazi_fs::path::clean_url;
 use yazi_macro::{act, succ};
 use yazi_parser::VoidOpt;
 use yazi_shared::event::Data;
@@ -18,9 +18,9 @@ impl Actor for Follow {
 		let Some(link_to) = &file.link_to else { succ!() };
 
 		if link_to.is_absolute() {
-			act!(mgr:reveal, cx, link_to.to_owned())
+			act!(mgr:reveal, cx, link_to.clone())
 		} else if let Some(p) = file.url.parent_url() {
-			act!(mgr:reveal, cx, clean_url(p.join(link_to)).into_owned())
+			act!(mgr:reveal, cx, clean_url(p.join(link_to)))
 		} else {
 			succ!()
 		}

@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize, de};
 
-use crate::{Id, SStr, url::{Url, UrnBuf}};
+use crate::{Id, SStr, url::{UrlBuf, UrlCow, UrnBuf}};
 
 // --- Data
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub enum Data {
 	Dict(HashMap<DataKey, Data>),
 	Id(Id),
 	#[serde(skip_deserializing)]
-	Url(Url),
+	Url(UrlBuf),
 	#[serde(skip_deserializing)]
 	Urn(UrnBuf),
 	#[serde(skip)]
@@ -64,11 +64,11 @@ impl Data {
 	}
 
 	#[inline]
-	pub fn into_url(self) -> Option<Url> {
+	pub fn into_url(self) -> Option<UrlCow<'static>> {
 		match self {
-			Self::String(s) => s.parse().ok(),
-			Self::Url(u) => Some(u),
-			Self::Bytes(b) => b.as_slice().try_into().ok(),
+			Self::String(s) => s.try_into().ok(),
+			Self::Url(u) => Some(u.into()),
+			Self::Bytes(b) => b.try_into().ok(),
 			_ => None,
 		}
 	}
@@ -94,10 +94,10 @@ impl Data {
 	}
 
 	#[inline]
-	pub fn to_url(&self) -> Option<Url> {
+	pub fn to_url(&self) -> Option<UrlCow<'_>> {
 		match self {
-			Self::String(s) => s.parse().ok(),
-			Self::Url(u) => Some(u.clone()),
+			Self::String(s) => s.as_ref().try_into().ok(),
+			Self::Url(u) => Some(u.into()),
 			Self::Bytes(b) => b.as_slice().try_into().ok(),
 			_ => None,
 		}
@@ -140,8 +140,8 @@ impl From<Id> for Data {
 	fn from(value: Id) -> Self { Self::Id(value) }
 }
 
-impl From<&Url> for Data {
-	fn from(value: &Url) -> Self { Self::Url(value.clone()) }
+impl From<&UrlBuf> for Data {
+	fn from(value: &UrlBuf) -> Self { Self::Url(value.clone()) }
 }
 
 impl From<&str> for Data {
@@ -164,7 +164,7 @@ pub enum DataKey {
 	String(SStr),
 	Id(Id),
 	#[serde(skip_deserializing)]
-	Url(Url),
+	Url(UrlBuf),
 	#[serde(skip_deserializing)]
 	Urn(UrnBuf),
 	#[serde(skip)]
@@ -184,11 +184,11 @@ impl DataKey {
 	}
 
 	#[inline]
-	pub fn into_url(self) -> Option<Url> {
+	pub fn into_url(self) -> Option<UrlCow<'static>> {
 		match self {
-			Self::String(s) => s.parse().ok(),
-			Self::Url(u) => Some(u),
-			Self::Bytes(b) => b.as_slice().try_into().ok(),
+			Self::String(s) => s.try_into().ok(),
+			Self::Url(u) => Some(u.into()),
+			Self::Bytes(b) => b.try_into().ok(),
 			_ => None,
 		}
 	}

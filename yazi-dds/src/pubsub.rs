@@ -1,11 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use anyhow::Result;
+use hashbrown::HashSet;
 use mlua::Function;
 use parking_lot::RwLock;
 use yazi_boot::BOOT;
 use yazi_fs::FolderStage;
-use yazi_shared::{Id, RoCell, url::{CovUrl, Url}};
+use yazi_shared::{Id, RoCell, url::{UrlBuf, UrlBufCov}};
 
 use crate::{Client, ID, PEERS, ember::{BodyMoveItem, Ember, EmberBulk, EmberHi}};
 
@@ -124,7 +125,7 @@ impl Pubsub {
 
 	pub fn pub_after_bulk<'a, I>(changes: I) -> Result<()>
 	where
-		I: Iterator<Item = (&'a Url, &'a Url)> + Clone,
+		I: Iterator<Item = (&'a UrlBuf, &'a UrlBuf)> + Clone,
 	{
 		if BOOT.local_events.contains("bulk") {
 			EmberBulk::borrowed(changes.clone()).with_receiver(*ID).flush()?;
@@ -149,21 +150,21 @@ impl Pubsub {
 impl Pubsub {
 	pub_after!(tab(idx: Id), (idx));
 
-	pub_after!(cd(tab: Id, url: &Url), (tab, url));
+	pub_after!(cd(tab: Id, url: &UrlBuf), (tab, url));
 
-	pub_after!(load(tab: Id, url: &Url, stage: FolderStage), (tab, url, stage));
+	pub_after!(load(tab: Id, url: &UrlBuf, stage: FolderStage), (tab, url, stage));
 
-	pub_after!(hover(tab: Id, url: Option<&Url>), (tab, url));
+	pub_after!(hover(tab: Id, url: Option<&UrlBuf>), (tab, url));
 
-	pub_after!(rename(tab: Id, from: &Url, to: &Url), (tab, from, to));
+	pub_after!(rename(tab: Id, from: &UrlBuf, to: &UrlBuf), (tab, from, to));
 
-	pub_after!(@yank(cut: bool, urls: &HashSet<CovUrl>), (cut, urls));
+	pub_after!(@yank(cut: bool, urls: &HashSet<UrlBufCov>), (cut, urls));
 
 	pub_after!(move(items: Vec<BodyMoveItem>), (&items), (items));
 
-	pub_after!(trash(urls: Vec<Url>), (&urls), (urls));
+	pub_after!(trash(urls: Vec<UrlBuf>), (&urls), (urls));
 
-	pub_after!(delete(urls: Vec<Url>), (&urls), (urls));
+	pub_after!(delete(urls: Vec<UrlBuf>), (&urls), (urls));
 
 	pub_after!(mount(), ());
 }

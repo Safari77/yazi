@@ -5,11 +5,11 @@ use tokio::pin;
 use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use yazi_config::popup::InputCfg;
 use yazi_dds::Pubsub;
-use yazi_fs::{File, FilesOp, expand_url};
+use yazi_fs::{File, FilesOp, path::expand_url};
 use yazi_macro::{act, err, render, succ};
 use yazi_parser::mgr::CdOpt;
 use yazi_proxy::{CmpProxy, InputProxy, MgrProxy};
-use yazi_shared::{Debounce, errors::InputError, event::Data, url::Url};
+use yazi_shared::{Debounce, errors::InputError, event::Data, url::UrlBuf};
 
 use crate::{Actor, Ctx};
 
@@ -39,19 +39,17 @@ impl Actor for Cd {
 		// Backstack
 		if opt.source.big_jump() {
 			if tab.current.url.is_regular() {
-				tab.backstack.push(&tab.current.url);
+				tab.backstack.push(tab.current.url.as_url());
 			}
 			if opt.target.is_regular() {
-				tab.backstack.push(&opt.target);
+				tab.backstack.push(opt.target.as_url());
 			}
 		}
 
 		// Current
 		let rep = tab.history.remove_or(&opt.target);
 		let rep = mem::replace(&mut tab.current, rep);
-		if rep.url.is_regular() {
-			tab.history.insert(rep.url.to_owned(), rep);
-		}
+		tab.history.insert(rep.url.to_owned(), rep);
 
 		// Parent
 		if let Some(parent) = opt.target.parent_url() {
@@ -78,9 +76,9 @@ impl Cd {
 			while let Some(result) = rx.next().await {
 				match result {
 					Ok(s) => {
-						let Ok(url) = Url::try_from(s).map(expand_url) else { return };
+						let Ok(url) = UrlBuf::try_from(s).map(expand_url) else { return };
 
-						let Ok(file) = File::new(url.as_ref().clone()).await else { return };
+						let Ok(file) = File::new(url.clone()).await else { return };
 						if file.is_dir() {
 							return MgrProxy::cd(&url);
 						}

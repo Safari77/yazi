@@ -6,10 +6,10 @@ use parking_lot::Mutex;
 use tokio::{select, sync::mpsc::{self, UnboundedReceiver}, task::JoinHandle};
 use yazi_config::{YAZI, plugin::{Fetcher, Preloader}};
 use yazi_dds::Pump;
-use yazi_fs::{must_be_dir, provider, remove_dir_clean, unique_name};
+use yazi_fs::{must_be_dir, path::unique_name, provider, remove_dir_clean};
 use yazi_parser::{app::PluginOpt, tasks::ProcessExecOpt};
 use yazi_proxy::MgrProxy;
-use yazi_shared::{Id, Throttle, url::Url};
+use yazi_shared::{Id, Throttle, url::UrlBuf};
 
 use super::{Ongoing, TaskProg, TaskStage};
 use crate::{HIGH, LOW, NORMAL, TaskKind, TaskOp, file::{File, FileInDelete, FileInHardlink, FileInLink, FileInPaste, FileInTrash}, plugin::{Plugin, PluginInEntry}, prework::{Prework, PreworkInFetch, PreworkInLoad, PreworkInSize}, process::{Process, ProcessInBg, ProcessInBlock, ProcessInOrphan}};
@@ -59,8 +59,8 @@ impl Scheduler {
 	pub fn cancel(&self, id: Id) -> bool {
 		let mut ongoing = self.ongoing.lock();
 
-		if let Some(fut) = ongoing.hooks.run_or_pop(id, true) {
-			self.micro.try_send(fut, HIGH).ok();
+		if let Some(hook) = ongoing.hooks.pop(id) {
+			self.micro.try_send(hook.call(true), HIGH).ok();
 			return false;
 		}
 
@@ -73,7 +73,7 @@ impl Scheduler {
 		}
 	}
 
-	pub fn file_cut(&self, from: Url, mut to: Url, force: bool) {
+	pub fn file_cut(&self, from: UrlBuf, mut to: UrlBuf, force: bool) {
 		let mut ongoing = self.ongoing.lock();
 		let id = ongoing.add(TaskKind::User, format!("Cut {} to {}", from.display(), to.display()));
 
@@ -86,15 +86,12 @@ impl Scheduler {
 			let ongoing = self.ongoing.clone();
 			let (from, to) = (from.clone(), to.clone());
 
-			move |canceled: bool| {
-				async move {
-					if !canceled {
-						remove_dir_clean(&from).await;
-						Pump::push_move(from, to);
-					}
-					ongoing.lock().try_remove(id, TaskStage::Hooked);
+			move |canceled: bool| async move {
+				if !canceled {
+					remove_dir_clean(&from).await;
+					Pump::push_move(from, to);
 				}
-				.boxed()
+				ongoing.lock().try_remove(id, TaskStage::Hooked);
 			}
 		});
 
@@ -107,7 +104,7 @@ impl Scheduler {
 		});
 	}
 
-	pub fn file_copy(&self, from: Url, mut to: Url, force: bool, follow: bool) {
+	pub fn file_copy(&self, from: UrlBuf, mut to: UrlBuf, force: bool, follow: bool) {
 		let id = self
 			.ongoing
 			.lock()
@@ -127,7 +124,7 @@ impl Scheduler {
 		});
 	}
 
-	pub fn file_link(&self, from: Url, mut to: Url, relative: bool, force: bool) {
+	pub fn file_link(&self, from: UrlBuf, mut to: UrlBuf, relative: bool, force: bool) {
 		let id = self
 			.ongoing
 			.lock()
@@ -144,7 +141,7 @@ impl Scheduler {
 		});
 	}
 
-	pub fn file_hardlink(&self, from: Url, mut to: Url, force: bool, follow: bool) {
+	pub fn file_hardlink(&self, from: UrlBuf, mut to: UrlBuf, force: bool, follow: bool) {
 		let id = self
 			.ongoing
 			.lock()
@@ -164,7 +161,7 @@ impl Scheduler {
 		});
 	}
 
-	pub fn file_delete(&self, target: Url) {
+	pub fn file_delete(&self, target: UrlBuf) {
 		let mut ongoing = self.ongoing.lock();
 		let id = ongoing.add(TaskKind::User, format!("Delete {}", target.display()));
 
@@ -172,16 +169,13 @@ impl Scheduler {
 			let target = target.clone();
 			let ongoing = self.ongoing.clone();
 
-			move |canceled: bool| {
-				async move {
-					if !canceled {
-						provider::remove_dir_all(&target).await.ok();
-						MgrProxy::update_tasks(&target);
-						Pump::push_delete(target);
-					}
-					ongoing.lock().try_remove(id, TaskStage::Hooked);
+			move |canceled: bool| async move {
+				if !canceled {
+					provider::remove_dir_all(&target).await.ok();
+					MgrProxy::update_tasks(&target);
+					Pump::push_delete(target);
 				}
-				.boxed()
+				ongoing.lock().try_remove(id, TaskStage::Hooked);
 			}
 		});
 
@@ -193,7 +187,7 @@ impl Scheduler {
 		);
 	}
 
-	pub fn file_trash(&self, target: Url) {
+	pub fn file_trash(&self, target: UrlBuf) {
 		let mut ongoing = self.ongoing.lock();
 		let id = ongoing.add(TaskKind::User, format!("Trash {}", target.display()));
 
@@ -201,15 +195,12 @@ impl Scheduler {
 			let target = target.clone();
 			let ongoing = self.ongoing.clone();
 
-			move |canceled: bool| {
-				async move {
-					if !canceled {
-						MgrProxy::update_tasks(&target);
-						Pump::push_trash(target);
-					}
-					ongoing.lock().try_remove(id, TaskStage::Hooked);
+			move |canceled: bool| async move {
+				if !canceled {
+					MgrProxy::update_tasks(&target);
+					Pump::push_trash(target);
 				}
-				.boxed()
+				ongoing.lock().try_remove(id, TaskStage::Hooked);
 			}
 		});
 
@@ -255,7 +246,7 @@ impl Scheduler {
 		});
 	}
 
-	pub fn prework_size(&self, targets: Vec<&Url>) {
+	pub fn prework_size(&self, targets: Vec<&UrlBuf>) {
 		let throttle = Arc::new(Throttle::new(targets.len(), Duration::from_millis(300)));
 		let mut ongoing = self.ongoing.lock();
 
@@ -288,18 +279,15 @@ impl Scheduler {
 		let id = ongoing.add(TaskKind::User, name);
 		ongoing.hooks.add_async(id, {
 			let ongoing = self.ongoing.clone();
-			move |canceled: bool| {
-				async move {
-					if canceled {
-						cancel_tx.send(()).await.ok();
-						cancel_tx.closed().await;
-					}
-					if let Some(tx) = done {
-						tx.send(()).ok();
-					}
-					ongoing.lock().try_remove(id, TaskStage::Hooked);
+			move |canceled: bool| async move {
+				if canceled {
+					cancel_tx.send(()).await.ok();
+					cancel_tx.closed().await;
 				}
-				.boxed()
+				if let Some(tx) = done {
+					tx.send(()).ok();
+				}
+				ongoing.lock().try_remove(id, TaskStage::Hooked);
 			}
 		});
 
@@ -388,14 +376,14 @@ impl Scheduler {
 							task.processed += processed;
 						}
 						if succ > 0
-							&& let Some(fut) = ongoing.try_remove(id, TaskStage::Pending)
+							&& let Some(hook) = ongoing.try_remove(id, TaskStage::Pending)
 						{
-							micro.try_send(fut, LOW).ok();
+							micro.try_send(hook.call(false), LOW).ok();
 						}
 					}
 					TaskProg::Succ(id) => {
-						if let Some(fut) = ongoing.lock().try_remove(id, TaskStage::Dispatched) {
-							micro.try_send(fut, LOW).ok();
+						if let Some(hook) = ongoing.lock().try_remove(id, TaskStage::Dispatched) {
+							micro.try_send(hook.call(false), LOW).ok();
 						}
 					}
 					TaskProg::Fail(id, reason) => {

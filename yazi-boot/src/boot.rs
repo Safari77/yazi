@@ -1,13 +1,13 @@
-use std::{borrow::Cow, collections::HashSet, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
 
 use futures::executor::block_on;
 use serde::Serialize;
-use yazi_fs::{CWD, Xdg, expand_url, provider};
-use yazi_shared::url::{Url, UrnBuf};
+use yazi_fs::{CWD, Xdg, path::expand_url, provider};
+use yazi_shared::url::{UrlBuf, UrnBuf};
 
 #[derive(Debug, Default, Serialize)]
 pub struct Boot {
-	pub cwds:  Vec<Url>,
+	pub cwds:  Vec<UrlBuf>,
 	pub files: Vec<UrnBuf>,
 
 	pub local_events:  HashSet<String>,
@@ -20,20 +20,20 @@ pub struct Boot {
 }
 
 impl Boot {
-	async fn parse_entries(entries: &[Url]) -> (Vec<Url>, Vec<UrnBuf>) {
+	async fn parse_entries(entries: &[UrlBuf]) -> (Vec<UrlBuf>, Vec<UrnBuf>) {
 		if entries.is_empty() {
 			return (vec![CWD.load().as_ref().clone()], vec![UrnBuf::default()]);
 		}
 
-		async fn go<'a>(entry: Cow<'a, Url>) -> (Url, UrnBuf) {
+		async fn go(entry: UrlBuf) -> (UrlBuf, UrnBuf) {
 			let Some((parent, child)) = entry.pair() else {
-				return (entry.into_owned(), UrnBuf::default());
+				return (entry, UrnBuf::default());
 			};
 
 			if provider::metadata(&entry).await.is_ok_and(|m| m.is_file()) {
 				(parent, child)
 			} else {
-				(entry.into_owned(), UrnBuf::default())
+				(entry, UrnBuf::default())
 			}
 		}
 

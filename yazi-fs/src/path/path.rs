@@ -1,98 +1,11 @@
-use std::{borrow::Cow, env, ffi::{OsStr, OsString}, future::Future, io, path::{Path, PathBuf}};
+use std::{borrow::Cow, ffi::{OsStr, OsString}, future::Future, io, path::PathBuf};
 
 use anyhow::{Result, bail};
-use yazi_shared::url::{Loc, Url};
+use yazi_shared::{loc::LocBuf, url::{UrlBuf, UrlCow}};
 
-use crate::{CWD, provider};
+use crate::provider;
 
-pub fn clean_url<'a>(url: impl Into<Cow<'a, Url>>) -> Cow<'a, Url> {
-	let url = url.into();
-	let path = clean_path(&url.loc);
-
-	if path.as_os_str() == url.loc.as_os_str() {
-		url
-	} else {
-		url.with(Loc::with_lossy(&clean_path(url.loc.base()), path)).into()
-	}
-}
-
-fn clean_path(path: &Path) -> PathBuf {
-	use std::path::Component::*;
-
-	let mut out = vec![];
-	for c in path.components() {
-		match c {
-			CurDir => {}
-			ParentDir => match out.last() {
-				Some(RootDir) => {}
-				Some(Normal(_)) => _ = out.pop(),
-				None | Some(CurDir) | Some(ParentDir) | Some(Prefix(_)) => out.push(c),
-			},
-			c => out.push(c),
-		}
-	}
-
-	if out.is_empty() { PathBuf::from(".") } else { out.iter().collect() }
-}
-
-// FIXME: VFS
-#[inline]
-pub fn expand_path(p: impl AsRef<Path>) -> PathBuf {
-	expand_url(Url::from(p.as_ref())).into_owned().loc.into_path()
-}
-
-#[inline]
-pub fn expand_url<'a>(url: impl Into<Cow<'a, Url>>) -> Cow<'a, Url> {
-	let cow: Cow<'a, Url> = url.into();
-	match _expand_url(&cow) {
-		Cow::Borrowed(_) => cow,
-		Cow::Owned(url) => url.into(),
-	}
-}
-
-fn _expand_url(url: &Url) -> Cow<'_, Url> {
-	// ${HOME} or $HOME
-	#[cfg(unix)]
-	let re = regex::bytes::Regex::new(r"\$(?:\{([^}]+)\}|([a-zA-Z\d_]+))").unwrap();
-
-	// %USERPROFILE%
-	#[cfg(windows)]
-	let re = regex::bytes::Regex::new(r"%([^%]+)%").unwrap();
-
-	let b = url.loc.as_os_str().as_encoded_bytes();
-	let local = !url.scheme.is_virtual();
-
-	// Windows paths that only have a drive letter but no root, e.g. "D:"
-	#[cfg(windows)]
-	if local && b.len() == 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
-		return url.with(format!(r"{}:\", b[0].to_ascii_uppercase() as char)).into();
-	}
-
-	let b = re.replace_all(b, |caps: &regex::bytes::Captures| {
-		let name = caps.get(2).or_else(|| caps.get(1)).unwrap();
-		str::from_utf8(name.as_bytes())
-			.ok()
-			.and_then(env::var_os)
-			.map_or_else(|| caps.get(0).unwrap().as_bytes().to_owned(), |s| s.into_encoded_bytes())
-	});
-
-	let path: Cow<_> = unsafe {
-		match b {
-			Cow::Borrowed(b) => Path::new(OsStr::from_encoded_bytes_unchecked(b)).into(),
-			Cow::Owned(b) => PathBuf::from(OsString::from_encoded_bytes_unchecked(b)).into(),
-		}
-	};
-
-	if let Some(rest) = path.strip_prefix("~").ok().filter(|_| local) {
-		url.with(clean_path(&dirs::home_dir().unwrap_or_default().join(rest))).into()
-	} else if path.is_absolute() {
-		url.with(clean_path(&path)).into()
-	} else {
-		clean_url(CWD.load().join(path))
-	}
-}
-
-pub fn skip_url(url: &Url, n: usize) -> Cow<'_, OsStr> {
+pub fn skip_url(url: &UrlBuf, n: usize) -> Cow<'_, OsStr> {
 	let mut it = url.components();
 	for _ in 0..n {
 		if it.next().is_none() {
@@ -102,7 +15,7 @@ pub fn skip_url(url: &Url, n: usize) -> Cow<'_, OsStr> {
 	it.os_str()
 }
 
-pub async fn unique_name<F>(u: Url, append: F) -> io::Result<Url>
+pub async fn unique_name<F>(u: UrlBuf, append: F) -> io::Result<UrlBuf>
 where
 	F: Future<Output = bool>,
 {
@@ -113,7 +26,7 @@ where
 	}
 }
 
-async fn _unique_name(mut url: Url, append: bool) -> io::Result<Url> {
+async fn _unique_name(mut url: UrlBuf, append: bool) -> io::Result<UrlBuf> {
 	let Some(stem) = url.file_stem().map(|s| s.to_owned()) else {
 		return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty file stem"));
 	};
@@ -133,11 +46,9 @@ async fn _unique_name(mut url: Url, append: bool) -> io::Result<Url> {
 
 		if append {
 			name.push(&dot_ext);
-			name.push("_");
-			name.push(i.to_string());
+			name.push(format!("_{i}"));
 		} else {
-			name.push("_");
-			name.push(i.to_string());
+			name.push(format!("_{i}"));
 			name.push(&dot_ext);
 		}
 
@@ -152,19 +63,26 @@ async fn _unique_name(mut url: Url, append: bool) -> io::Result<Url> {
 	Ok(url)
 }
 
-pub fn url_relative_to<'a>(from: &Url, to: &'a Url) -> Result<Cow<'a, Url>> {
+pub fn url_relative_to<'a>(
+	from: impl Into<UrlCow<'a>>,
+	to: impl Into<UrlCow<'a>>,
+) -> Result<UrlCow<'a>> {
+	url_relative_to_impl(from.into(), to.into())
+}
+
+pub fn url_relative_to_impl<'a>(from: UrlCow<'a>, to: UrlCow<'a>) -> Result<UrlCow<'a>> {
 	use yazi_shared::url::Component::*;
 
 	if from.is_absolute() != to.is_absolute() {
 		return if to.is_absolute() {
-			Ok(to.into())
+			Ok(to)
 		} else {
 			bail!("Urls must be both absolute or both relative: {from:?} and {to:?}");
 		};
 	}
 
-	if from.covariant(to) {
-		return Ok(to.with(Path::new(".")).into());
+	if from.covariant(&to) {
+		return Ok(UrlBuf { loc: LocBuf::zeroed("."), scheme: to.scheme().clone() }.into());
 	}
 
 	let (mut f_it, mut t_it) = (from.components(), to.components());
@@ -174,7 +92,7 @@ pub fn url_relative_to<'a>(from: &Url, to: &'a Url) -> Result<Cow<'a, Url>> {
 			(Some(RootDir), Some(RootDir)) => {}
 			(Some(Prefix(a)), Some(Prefix(b))) if a == b => {}
 			(Some(Scheme(_) | Prefix(_) | RootDir), _) | (_, Some(Scheme(_) | Prefix(_) | RootDir)) => {
-				return Ok(to.into());
+				return Ok(to);
 			}
 			(None, None) => break (None, None),
 			(a, b) if a != b => break (a, b),
@@ -186,11 +104,11 @@ pub fn url_relative_to<'a>(from: &Url, to: &'a Url) -> Result<Cow<'a, Url>> {
 	let rest = t_head.into_iter().chain(t_it);
 
 	let buf: PathBuf = dots.chain(rest).collect();
-	Ok(to.with(buf).into())
+	Ok(UrlBuf { loc: LocBuf::zeroed(buf), scheme: to.scheme().clone() }.into())
 }
 
 #[cfg(windows)]
-pub fn backslash_to_slash(p: &Path) -> Cow<'_, Path> {
+pub fn backslash_to_slash(p: &std::path::Path) -> Cow<'_, std::path::Path> {
 	let bytes = p.as_os_str().as_encoded_bytes();
 
 	// Fast path to skip if there are no backslashes
@@ -212,8 +130,6 @@ pub fn backslash_to_slash(p: &Path) -> Cow<'_, Path> {
 
 #[cfg(test)]
 mod tests {
-	use std::borrow::Cow;
-
 	use super::url_relative_to;
 
 	#[test]
@@ -221,7 +137,7 @@ mod tests {
 		fn assert(from: &str, to: &str, ret: &str) {
 			assert_eq!(
 				url_relative_to(&from.parse().unwrap(), &to.parse().unwrap()).unwrap(),
-				Cow::Owned(ret.parse().unwrap())
+				ret.parse().unwrap()
 			);
 		}
 

@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use globset::GlobBuilder;
 use serde::Deserialize;
-use yazi_shared::url::{Scheme, Url};
+use yazi_shared::url::{Scheme, UrlBuf};
 
 #[derive(Debug, Deserialize)]
 #[serde(try_from = "String")]
@@ -18,7 +18,7 @@ pub struct Pattern {
 
 impl Pattern {
 	#[inline]
-	pub fn match_url(&self, url: impl AsRef<Url>, is_dir: bool) -> bool {
+	pub fn match_url(&self, url: impl AsRef<UrlBuf>, is_dir: bool) -> bool {
 		let url = url.as_ref();
 
 		if is_dir != self.is_dir {
@@ -34,7 +34,7 @@ impl Pattern {
 
 		#[cfg(windows)]
 		let path = if self.sep_lit {
-			yazi_fs::backslash_to_slash(&url.loc)
+			yazi_fs::path::backslash_to_slash(&url.loc)
 		} else {
 			std::borrow::Cow::Borrowed(url.loc.as_path())
 		};
@@ -124,7 +124,7 @@ mod tests {
 	use super::*;
 
 	fn matches(glob: &str, url: &str) -> bool {
-		Pattern::from_str(glob).unwrap().match_url(Url::from_str(url).unwrap(), false)
+		Pattern::from_str(glob).unwrap().match_url(UrlBuf::from_str(url).unwrap(), false)
 	}
 
 	#[cfg(unix)]

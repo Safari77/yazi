@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use yazi_macro::relay;
-use yazi_shared::{Id, Ids, url::{Url, UrnBuf}};
+use yazi_shared::{Id, Ids, url::{UrlBuf, UrnBuf}};
 
 use super::File;
 use crate::{cha::Cha, maybe_exists};
@@ -10,21 +10,21 @@ pub static FILES_TICKET: Ids = Ids::new();
 
 #[derive(Clone, Debug)]
 pub enum FilesOp {
-	Full(Url, Vec<File>, Cha),
-	Part(Url, Vec<File>, Id),
-	Done(Url, Cha, Id),
-	Size(Url, HashMap<UrnBuf, u64>),
-	IOErr(Url, std::io::ErrorKind),
+	Full(UrlBuf, Vec<File>, Cha),
+	Part(UrlBuf, Vec<File>, Id),
+	Done(UrlBuf, Cha, Id),
+	Size(UrlBuf, HashMap<UrnBuf, u64>),
+	IOErr(UrlBuf, std::io::ErrorKind),
 
-	Creating(Url, Vec<File>),
-	Deleting(Url, HashSet<UrnBuf>),
-	Updating(Url, HashMap<UrnBuf, File>),
-	Upserting(Url, HashMap<UrnBuf, File>),
+	Creating(UrlBuf, Vec<File>),
+	Deleting(UrlBuf, HashSet<UrnBuf>),
+	Updating(UrlBuf, HashMap<UrnBuf, File>),
+	Upserting(UrlBuf, HashMap<UrnBuf, File>),
 }
 
 impl FilesOp {
 	#[inline]
-	pub fn cwd(&self) -> &Url {
+	pub fn cwd(&self) -> &UrlBuf {
 		match self {
 			Self::Full(u, ..) => u,
 			Self::Part(u, ..) => u,
@@ -44,13 +44,13 @@ impl FilesOp {
 		yazi_shared::event::Event::Call(relay!(mgr:update_files).with_any("op", self).into()).emit();
 	}
 
-	pub fn prepare(cwd: &Url) -> Id {
+	pub fn prepare(cwd: &UrlBuf) -> Id {
 		let ticket = FILES_TICKET.next();
 		Self::Part(cwd.clone(), vec![], ticket).emit();
 		ticket
 	}
 
-	pub fn rename(map: HashMap<Url, File>) {
+	pub fn rename(map: HashMap<UrlBuf, File>) {
 		let mut parents: HashMap<_, (HashSet<_>, HashMap<_, _>)> = Default::default();
 		for (o, n) in map {
 			let Some(o_p) = o.parent_url() else { continue };
@@ -95,30 +95,30 @@ impl FilesOp {
 		}
 	}
 
-	pub fn rebase(&self, new: &Url) -> Self {
+	pub fn chdir(&self, wd: &UrlBuf) -> Self {
 		macro_rules! files {
-			($files:expr) => {{ $files.iter().map(|f| f.rebase(new)).collect() }};
+			($files:expr) => {{ $files.iter().map(|file| file.chdir(wd)).collect() }};
 		}
 		macro_rules! map {
-			($map:expr) => {{ $map.iter().map(|(u, f)| (u.clone(), f.rebase(new))).collect() }};
+			($map:expr) => {{ $map.iter().map(|(urn, file)| (urn.clone(), file.chdir(wd))).collect() }};
 		}
 
-		let n = new.clone();
+		let w = wd.clone();
 		match self {
-			Self::Full(_, files, cha) => Self::Full(n, files!(files), *cha),
-			Self::Part(_, files, ticket) => Self::Part(n, files!(files), *ticket),
-			Self::Done(_, cha, ticket) => Self::Done(n, *cha, *ticket),
-			Self::Size(_, map) => Self::Size(n, map.iter().map(|(u, &s)| (u.clone(), s)).collect()),
-			Self::IOErr(_, err) => Self::IOErr(n, *err),
+			Self::Full(_, files, cha) => Self::Full(w, files!(files), *cha),
+			Self::Part(_, files, ticket) => Self::Part(w, files!(files), *ticket),
+			Self::Done(_, cha, ticket) => Self::Done(w, *cha, *ticket),
+			Self::Size(_, map) => Self::Size(w, map.iter().map(|(urn, &s)| (urn.clone(), s)).collect()),
+			Self::IOErr(_, err) => Self::IOErr(w, *err),
 
-			Self::Creating(_, files) => Self::Creating(n, files!(files)),
-			Self::Deleting(_, urns) => Self::Deleting(n, urns.clone()),
-			Self::Updating(_, map) => Self::Updating(n, map!(map)),
-			Self::Upserting(_, map) => Self::Upserting(n, map!(map)),
+			Self::Creating(_, files) => Self::Creating(w, files!(files)),
+			Self::Deleting(_, urns) => Self::Deleting(w, urns.clone()),
+			Self::Updating(_, map) => Self::Updating(w, map!(map)),
+			Self::Upserting(_, map) => Self::Upserting(w, map!(map)),
 		}
 	}
 
-	pub async fn issue_error(cwd: &Url, kind: std::io::ErrorKind) {
+	pub async fn issue_error(cwd: &UrlBuf, kind: std::io::ErrorKind) {
 		use std::io::ErrorKind;
 		if kind != ErrorKind::NotFound {
 			Self::IOErr(cwd.clone(), kind).emit();
@@ -129,7 +129,7 @@ impl FilesOp {
 		}
 	}
 
-	pub fn diff_recoverable(&self, contains: impl Fn(&Url) -> bool) -> (Vec<Url>, Vec<Url>) {
+	pub fn diff_recoverable(&self, contains: impl Fn(&UrlBuf) -> bool) -> (Vec<UrlBuf>, Vec<UrlBuf>) {
 		match self {
 			Self::Deleting(cwd, urns) => (urns.iter().map(|u| cwd.join(u)).collect(), vec![]),
 			Self::Updating(cwd, urns) | Self::Upserting(cwd, urns) => urns
