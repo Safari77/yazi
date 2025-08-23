@@ -103,12 +103,14 @@ module.exports = async ({ github, context, core }) => {
 					issue_number: id,
 					name        : LABEL_NAME,
 				})
+				await hideOldComments(id)
 			} else if (mark && !marked && !await removedLabelManually(id)) {
 				await github.rest.issues.addLabels({
 					...context.repo,
 					issue_number: id,
 					labels      : [LABEL_NAME],
 				})
+				await hideOldComments(id)
 				await github.rest.issues.createComment({
 					...context.repo,
 					issue_number: id,
@@ -117,6 +119,37 @@ module.exports = async ({ github, context, core }) => {
 			}
 		} catch (e) {
 			core.error(`Error updating labels: ${e.message}`)
+		}
+	}
+
+	async function hideOldComments(id) {
+		try {
+			const comments = await github.paginate(github.rest.issues.listComments, {
+				...context.repo,
+				issue_number: id,
+				per_page    : 100,
+			})
+
+			for (const c of comments) {
+				const byBot = c.user?.login?.endsWith("[bot]") || c.user?.type === "Bot"
+				const contains = c?.body?.includes("or closed after 2 days of inactivity")
+				if (!byBot || !contains || !c.node_id) continue
+
+				try {
+					await github.graphql(
+						`mutation($subjectId: ID!, $classifier: ReportedContentClassifiers!) {
+							minimizeComment(input: {subjectId: $subjectId, classifier: $classifier}) {
+								minimizedComment { isMinimized }
+							}
+						}`,
+						{ subjectId: c.node_id, classifier: "OUTDATED" },
+					)
+				} catch (e) {
+					core.error(`Error minimizing comment ${c.id}: ${e.message}`)
+				}
+			}
+		} catch (e) {
+			core.error(`Error listing comments: ${e.message}`)
 		}
 	}
 
@@ -153,6 +186,25 @@ If the problem persists, please file a new issue and complete the issue template
 		}
 	}
 
+	async function closeUnsupportedIssue(id) {
+		try {
+			await github.rest.issues.update({
+				...context.repo,
+				issue_number: id,
+				state       : "closed",
+				state_reason: "not_planned",
+			})
+			await github.rest.issues.createComment({
+				...context.repo,
+				issue_number: id,
+				body        : `Unsupported issue template.
+Either the [Bug Report](https://github.com/sxyazi/yazi/issues/new?template=bug.yml) or [Feature Request](https://github.com/sxyazi/yazi/issues/new?template=feature.yml) template should be used.`,
+			})
+		} catch (e) {
+			core.error(`Error closing unsupported issue: ${e.message}`)
+		}
+	}
+
 	async function main() {
 		const hash = await nightlyHash()
 		if (!hash) return
@@ -173,6 +225,8 @@ If the problem persists, please file a new issue and complete the issue template
 			} else if (await hasLabel(id, "feature")) {
 				const body = featureRequestBody(creator, content)
 				await updateLabels(id, !!body, body)
+			} else if (context.payload.action === "opened") {
+				await closeUnsupportedIssue(id)
 			}
 		}
 	}

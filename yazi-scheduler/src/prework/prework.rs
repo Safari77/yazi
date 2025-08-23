@@ -1,6 +1,7 @@
-use std::{collections::{HashMap, HashSet}, num::NonZeroUsize};
+use std::num::NonZeroUsize;
 
 use anyhow::{Result, anyhow};
+use hashbrown::{HashMap, HashSet};
 use lru::LruCache;
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::mpsc;
@@ -91,7 +92,7 @@ impl Prework {
 
 					let parent = buf[0].0.parent_url().unwrap();
 					FilesOp::Size(
-						parent,
+						parent.into(),
 						HashMap::from_iter(buf.into_iter().map(|(u, s)| (u.urn_owned(), s))),
 					)
 					.emit();
