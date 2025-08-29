@@ -3,28 +3,30 @@ use std::{borrow::Cow, path::{Path, PathBuf}};
 use anyhow::Result;
 use percent_encoding::percent_decode;
 
-use crate::{IntoOsStr, loc::{Loc, LocBuf}, url::{Components, Scheme, Url, UrlBuf, UrnBuf}};
+use crate::{IntoOsStr, loc::{Loc, LocBuf}, scheme::{SchemeCow, SchemeRef}, url::{Components, Url, UrlBuf, Urn}};
 
 #[derive(Debug)]
 pub enum UrlCow<'a> {
-	Borrowed(Url<'a>),
-	Owned(UrlBuf),
+	Borrowed { loc: Loc<'a>, scheme: SchemeCow<'a> },
+	Owned { loc: LocBuf, scheme: SchemeCow<'a> },
 }
 
 impl Default for UrlCow<'_> {
-	fn default() -> Self { Self::Owned(UrlBuf::default()) }
+	fn default() -> Self { Self::Owned { loc: Default::default(), scheme: Default::default() } }
 }
 
 impl<'a> From<Url<'a>> for UrlCow<'a> {
-	fn from(value: Url<'a>) -> Self { Self::Borrowed(value) }
+	fn from(value: Url<'a>) -> Self { Self::Borrowed { loc: value.loc, scheme: value.scheme.into() } }
 }
 
 impl<'a> From<&'a UrlBuf> for UrlCow<'a> {
-	fn from(value: &'a UrlBuf) -> Self { Self::Borrowed(value.into()) }
+	fn from(value: &'a UrlBuf) -> Self {
+		Self::Borrowed { loc: value.loc.as_loc(), scheme: SchemeCow::from(&value.scheme) }
+	}
 }
 
 impl From<UrlBuf> for UrlCow<'_> {
-	fn from(value: UrlBuf) -> Self { Self::Owned(value) }
+	fn from(value: UrlBuf) -> Self { Self::Owned { loc: value.loc, scheme: value.scheme.into() } }
 }
 
 impl<'a> From<&'a UrlCow<'a>> for Url<'a> {
@@ -35,6 +37,10 @@ impl From<UrlCow<'_>> for UrlBuf {
 	fn from(value: UrlCow<'_>) -> Self { value.into_owned() }
 }
 
+impl From<&UrlCow<'_>> for UrlBuf {
+	fn from(value: &UrlCow<'_>) -> Self { value.as_url().into() }
+}
+
 impl<'a> TryFrom<&'a [u8]> for UrlCow<'a> {
 	type Error = anyhow::Error;
 
@@ -42,11 +48,13 @@ impl<'a> TryFrom<&'a [u8]> for UrlCow<'a> {
 		let (scheme, path, port) = Self::parse(value)?;
 
 		Ok(match (path, port) {
-			(Cow::Borrowed(p), None) => Url { loc: Loc::from(p), scheme }.into(),
-			(Cow::Borrowed(p), Some((uri, urn))) => Url { loc: Loc::with(p, uri, urn)?, scheme }.into(),
-			(Cow::Owned(p), None) => UrlBuf { loc: LocBuf::from(p), scheme }.into(),
+			(Cow::Borrowed(p), None) => Self::Borrowed { loc: Loc::from(p), scheme },
+			(Cow::Borrowed(p), Some((uri, urn))) => {
+				Self::Borrowed { loc: Loc::with(p, uri, urn)?, scheme }
+			}
+			(Cow::Owned(p), None) => Self::Owned { loc: LocBuf::from(p), scheme },
 			(Cow::Owned(p), Some((uri, urn))) => {
-				UrlBuf { loc: LocBuf::with(p, uri, urn)?, scheme }.into()
+				Self::Owned { loc: LocBuf::with(p, uri, urn)?, scheme }
 			}
 		})
 	}
@@ -90,42 +98,56 @@ impl PartialEq<UrlBuf> for UrlCow<'_> {
 	fn eq(&self, other: &UrlBuf) -> bool { self.as_url() == other.as_url() }
 }
 
-impl UrlCow<'_> {
+impl<'a> UrlCow<'a> {
 	#[inline]
 	pub fn loc(&self) -> Loc<'_> {
 		match self {
-			UrlCow::Borrowed(u) => u.loc.as_loc(),
-			UrlCow::Owned(u) => u.loc.as_loc(),
+			UrlCow::Borrowed { loc, .. } => *loc,
+			UrlCow::Owned { loc, .. } => loc.as_loc(),
 		}
 	}
 
 	#[inline]
-	pub fn scheme(&self) -> &Scheme {
+	pub fn scheme(&self) -> SchemeRef<'_> {
 		match self {
-			UrlCow::Borrowed(u) => &u.scheme,
-			UrlCow::Owned(u) => &u.scheme,
+			UrlCow::Borrowed { scheme, .. } => scheme.as_ref(),
+			UrlCow::Owned { scheme, .. } => scheme.as_ref(),
 		}
 	}
 
+	#[inline]
 	pub fn as_url(&self) -> Url<'_> {
 		match self {
-			UrlCow::Borrowed(u) => u.as_url(),
-			UrlCow::Owned(u) => u.as_url(),
+			UrlCow::Borrowed { loc, scheme } => Url { loc: *loc, scheme: scheme.as_ref() },
+			UrlCow::Owned { loc, scheme } => Url { loc: loc.as_loc(), scheme: scheme.as_ref() },
 		}
 	}
 
 	#[inline]
-	pub fn into_owned(self) -> UrlBuf { self.as_url().into() }
+	pub fn into_owned(self) -> UrlBuf {
+		match self {
+			UrlCow::Borrowed { loc, scheme } => UrlBuf { loc: loc.into(), scheme: scheme.into() },
+			UrlCow::Owned { loc, scheme } => UrlBuf { loc, scheme: scheme.into() },
+		}
+	}
 
 	#[inline]
-	pub fn parent_url(&self) -> Option<Url<'_>> { self.as_url().parent_url() }
+	pub fn into_scheme(self) -> SchemeCow<'a> {
+		match self {
+			UrlCow::Borrowed { scheme, .. } => scheme,
+			UrlCow::Owned { scheme, .. } => scheme,
+		}
+	}
 
 	#[inline]
-	pub fn pair(&self) -> Option<(Url<'_>, UrnBuf)> { self.as_url().pair() }
+	pub fn parent(&self) -> Option<Url<'_>> { self.as_url().parent() }
 
-	pub fn parse(bytes: &[u8]) -> Result<(Scheme, Cow<'_, Path>, Option<(usize, usize)>)> {
+	#[inline]
+	pub fn pair(&self) -> Option<(Url<'_>, &Urn)> { self.as_url().pair() }
+
+	pub fn parse(bytes: &[u8]) -> Result<(SchemeCow<'_>, Cow<'_, Path>, Option<(usize, usize)>)> {
 		let mut skip = 0;
-		let (scheme, tilde, uri, urn) = Scheme::parse(bytes, &mut skip)?;
+		let (scheme, tilde, uri, urn) = SchemeCow::parse(bytes, &mut skip)?;
 
 		let rest = if tilde {
 			Cow::from(percent_decode(&bytes[skip..])).into_os_str()?

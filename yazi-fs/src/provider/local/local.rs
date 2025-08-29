@@ -114,11 +114,11 @@ impl Local {
 	}
 
 	#[inline]
-	pub async fn metadata<P>(url: P) -> io::Result<std::fs::Metadata>
+	pub async fn metadata<P>(path: P) -> io::Result<std::fs::Metadata>
 	where
 		P: AsRef<Path>,
 	{
-		tokio::fs::metadata(url).await
+		tokio::fs::metadata(path).await
 	}
 
 	#[inline]
@@ -154,11 +154,11 @@ impl Local {
 	}
 
 	#[inline]
-	pub async fn read_link<P>(url: P) -> io::Result<PathBuf>
+	pub async fn read_link<P>(path: P) -> io::Result<PathBuf>
 	where
 		P: AsRef<Path>,
 	{
-		tokio::fs::read_link(url).await
+		tokio::fs::read_link(path).await
 	}
 
 	#[inline]
@@ -200,63 +200,6 @@ impl Local {
 		Q: AsRef<Path>,
 	{
 		tokio::fs::rename(from, to).await
-	}
-
-	#[inline]
-	pub async fn same<P, Q>(a: P, b: Q) -> io::Result<bool>
-	where
-		P: AsRef<Path>,
-		Q: AsRef<Path>,
-	{
-		Self::same_impl(a.as_ref(), b.as_ref()).await
-	}
-
-	#[cfg(unix)]
-	async fn same_impl(a: &Path, b: &Path) -> io::Result<bool> {
-		use std::os::unix::fs::MetadataExt;
-
-		let (a_, b_) = (tokio::fs::symlink_metadata(a).await?, tokio::fs::symlink_metadata(b).await?);
-		Ok(
-			a_.ino() == b_.ino()
-				&& a_.dev() == b_.dev()
-				&& tokio::fs::canonicalize(a).await? == tokio::fs::canonicalize(b).await?,
-		)
-	}
-
-	#[cfg(windows)]
-	async fn same_impl(a: &Path, b: &Path) -> io::Result<bool> {
-		use std::{ffi::OsString, os::windows::{ffi::OsStringExt, fs::OpenOptionsExt, io::AsRawHandle}};
-
-		use windows_sys::Win32::{Foundation::{HANDLE, MAX_PATH}, Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, GetFinalPathNameByHandleW, VOLUME_NAME_DOS}};
-
-		async fn final_name(path: &Path) -> io::Result<PathBuf> {
-			let path = path.to_owned();
-			tokio::task::spawn_blocking(move || {
-				let file = std::fs::OpenOptions::new()
-					.access_mode(0)
-					.custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
-					.open(path)?;
-
-				let mut buf = [0u16; MAX_PATH as usize];
-				let len = unsafe {
-					GetFinalPathNameByHandleW(
-						file.as_raw_handle() as HANDLE,
-						buf.as_mut_ptr(),
-						buf.len() as u32,
-						VOLUME_NAME_DOS,
-					)
-				};
-
-				if len == 0 {
-					Err(io::Error::last_os_error())
-				} else {
-					Ok(PathBuf::from(OsString::from_wide(&buf[0..len as usize])))
-				}
-			})
-			.await?
-		}
-
-		Ok(final_name(a).await? == final_name(b).await?)
 	}
 
 	#[inline]

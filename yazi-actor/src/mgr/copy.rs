@@ -33,15 +33,15 @@ impl Actor for Copy {
 					s.push(opt.separator.transform(&u.os_str()));
 				}
 				"dirname" => {
-					if let Some(p) = u.parent_url() {
+					if let Some(p) = u.parent() {
 						s.push(opt.separator.transform(&p.os_str()));
 					}
 				}
 				"filename" => {
-					s.push(opt.separator.transform(u.name()));
+					s.push(opt.separator.transform(u.name().unwrap_or_default()));
 				}
 				"name_without_ext" => {
-					s.push(opt.separator.transform(u.file_stem().unwrap_or_default()));
+					s.push(opt.separator.transform(u.stem().unwrap_or_default()));
 				}
 				_ => bail!("Unknown copy type: {}", opt.r#type),
 			};

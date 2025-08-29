@@ -52,8 +52,8 @@ impl Actor for Cd {
 		tab.history.insert(rep.url.to_owned(), rep);
 
 		// Parent
-		if let Some(parent) = opt.target.parent_url() {
-			tab.parent = Some(tab.history.remove_or(&parent));
+		if let Some(parent) = opt.target.parent() {
+			tab.parent = Some(tab.history.remove_or(parent));
 		}
 
 		err!(Pubsub::pub_after_cd(tab.id, tab.cwd()));
@@ -83,8 +83,8 @@ impl Cd {
 							return MgrProxy::cd(&url);
 						}
 
-						if let Some(p) = url.parent_url() {
-							FilesOp::Upserting(p.into(), [(url.urn_owned(), file)].into()).emit();
+						if let Some(p) = url.parent() {
+							FilesOp::Upserting(p.into(), [(url.urn().to_owned(), file)].into()).emit();
 						}
 						MgrProxy::reveal(&url);
 					}

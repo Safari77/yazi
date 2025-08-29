@@ -77,7 +77,7 @@ impl File {
 				};
 
 				let src = if task.relative {
-					path_relative_to(provider::canonicalize(&task.to.parent_url().unwrap()).await?.loc, &src)?
+					path_relative_to(provider::canonicalize(task.to.parent().unwrap()).await?.loc, &src)?
 				} else {
 					src
 				};
@@ -188,7 +188,7 @@ impl File {
 					continue;
 				}
 
-				let to = dest.join(from.file_name().unwrap());
+				let to = dest.join(from.name().unwrap());
 				self.prog.send(TaskProg::New(task.id, cha.len))?;
 
 				if cha.is_orphan() || (cha.is_link() && !task.follow) {
@@ -259,7 +259,7 @@ impl File {
 					continue;
 				}
 
-				let to = dest.join(from.file_name().unwrap());
+				let to = dest.join(from.name().unwrap());
 				self.prog.send(TaskProg::New(task.id, cha.len))?;
 				self.queue(FileIn::Hardlink(task.spawn(from, to, cha)), NORMAL).await?;
 			}

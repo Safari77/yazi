@@ -1,11 +1,11 @@
-use std::{hash::{Hash, Hasher}, ops::Deref};
+use std::{hash::{Hash, Hasher}, ops::Deref, path::PathBuf};
 
 use hashbrown::Equivalent;
 use serde::{Deserialize, Serialize};
 
 use crate::url::{Url, UrlBuf, UrlCow};
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct UrlCov<'a>(Url<'a>);
 
 impl<'a> Deref for UrlCov<'a> {
@@ -50,12 +50,16 @@ impl Deref for UrlBufCov {
 	fn deref(&self) -> &Self::Target { &self.0 }
 }
 
+impl From<UrlBufCov> for UrlBuf {
+	fn from(value: UrlBufCov) -> Self { value.0 }
+}
+
 impl From<UrlBuf> for UrlBufCov {
 	fn from(value: UrlBuf) -> Self { Self(value) }
 }
 
-impl From<UrlBufCov> for UrlBuf {
-	fn from(value: UrlBufCov) -> Self { value.0 }
+impl From<PathBuf> for UrlBufCov {
+	fn from(value: PathBuf) -> Self { Self(UrlBuf::from(value)) }
 }
 
 impl From<UrlCow<'_>> for UrlBufCov {
@@ -91,5 +95,5 @@ impl UrlBufCov {
 	pub fn as_url(&self) -> UrlCov<'_> { UrlCov::from(self) }
 
 	#[inline]
-	pub fn parent_url(&self) -> Option<UrlBufCov> { self.0.parent_url().map(Into::into) }
+	pub fn parent(&self) -> Option<UrlBufCov> { self.0.parent().map(Into::into) }
 }

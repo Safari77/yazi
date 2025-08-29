@@ -1,9 +1,10 @@
 use anyhow::Result;
-use yazi_core::{mgr::LINKED, tab::Folder};
+use yazi_core::tab::Folder;
 use yazi_fs::FilesOp;
 use yazi_macro::{act, render, succ};
 use yazi_parser::mgr::UpdateFilesOpt;
 use yazi_shared::event::Data;
+use yazi_watcher::LINKED;
 
 use crate::{Actor, Ctx};
 
@@ -100,7 +101,7 @@ impl UpdateFiles {
 
 	fn update_history(cx: &mut Ctx, op: FilesOp) -> Result<Data> {
 		let tab = &mut cx.tab_mut();
-		let leave = tab.parent.as_ref().and_then(|f| f.url.parent_url().map(|p| (p, f.url.urn()))).is_some_and(
+		let leave = tab.parent.as_ref().and_then(|f| f.url.parent().map(|p| (p, f.url.urn()))).is_some_and(
 			|(p, n)| matches!(op, FilesOp::Deleting(ref parent, ref urns) if *parent == p && urns.contains(n)),
 		);
 

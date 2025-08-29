@@ -1,21 +1,14 @@
-use std::{borrow::Cow, ffi::OsStr, fmt::{Debug, Formatter}, hash::BuildHasher, ops::Deref, path::{Path, PathBuf}, str::FromStr};
+use std::{borrow::Cow, ffi::OsStr, fmt::{Debug, Formatter}, hash::BuildHasher, path::{Path, PathBuf}, str::FromStr};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::UrnBuf;
-use crate::{loc::LocBuf, pool::Pool, url::{Components, Display, Encode, EncodeTilded, Scheme, Url, UrlCow, Urn}};
+use crate::{loc::LocBuf, pool::Pool, scheme::{Scheme, SchemeRef}, url::{Components, Display, Encode, EncodeTilded, Uri, Url, UrlCow, Urn}};
 
-#[derive(Clone, Default, Eq, Ord, PartialOrd, PartialEq, Hash)]
+#[derive(Clone, Default, Eq, Hash, PartialEq)]
 pub struct UrlBuf {
 	pub loc:    LocBuf,
 	pub scheme: Scheme,
-}
-
-impl Deref for UrlBuf {
-	type Target = LocBuf;
-
-	fn deref(&self) -> &Self::Target { &self.loc }
 }
 
 impl From<LocBuf> for UrlBuf {
@@ -27,11 +20,11 @@ impl From<PathBuf> for UrlBuf {
 }
 
 impl From<&Url<'_>> for UrlBuf {
-	fn from(url: &Url<'_>) -> Self { Self { loc: url.loc.into(), scheme: url.scheme.clone() } }
+	fn from(url: &Url<'_>) -> Self { Self { loc: url.loc.into(), scheme: url.scheme.into() } }
 }
 
 impl From<Url<'_>> for UrlBuf {
-	fn from(url: Url<'_>) -> Self { Self { loc: url.loc.into(), scheme: url.scheme } }
+	fn from(url: Url<'_>) -> Self { Self { loc: url.loc.into(), scheme: url.scheme.into() } }
 }
 
 impl From<&UrlBuf> for UrlBuf {
@@ -102,7 +95,7 @@ impl UrlBuf {
 	pub fn covariant(&self, other: &Self) -> bool { self.as_url().covariant(other) }
 
 	#[inline]
-	pub fn parent_url(&self) -> Option<Url<'_>> { self.as_url().parent_url() }
+	pub fn parent(&self) -> Option<Url<'_>> { self.as_url().parent() }
 
 	#[inline]
 	pub fn starts_with<'a>(&self, base: impl Into<Url<'a>>) -> bool {
@@ -114,41 +107,40 @@ impl UrlBuf {
 
 	pub fn strip_prefix<'a>(&self, base: impl Into<Url<'a>>) -> Option<&Urn> {
 		use Scheme as S;
+		use SchemeRef as T;
 
 		let base = base.into();
 		let prefix = self.loc.strip_prefix(base.loc).ok()?;
 
-		Some(Urn::new(match (&self.scheme, &base.scheme) {
+		Some(Urn::new(match (&self.scheme, base.scheme) {
 			// Same scheme
-			(S::Regular, S::Regular) => Some(prefix),
-			(S::Search(_), S::Search(_)) => Some(prefix),
-			(S::Archive(a), S::Archive(b)) => Some(prefix).filter(|_| a == b),
-			(S::Sftp(a), S::Sftp(b)) => Some(prefix).filter(|_| a == b),
+			(S::Regular, T::Regular) => Some(prefix),
+			(S::Search(_), T::Search(_)) => Some(prefix),
+			(S::Archive(a), T::Archive(b)) => Some(prefix).filter(|_| a == b),
+			(S::Sftp(a), T::Sftp(b)) => Some(prefix).filter(|_| a == b),
 
 			// Both are local files
-			(S::Regular, S::Search(_)) => Some(prefix),
-			(S::Search(_), S::Regular) => Some(prefix),
+			(S::Regular, T::Search(_)) => Some(prefix),
+			(S::Search(_), T::Regular) => Some(prefix),
 
 			// Only the entry of archives is a local file
-			(S::Regular, S::Archive(_)) => Some(prefix).filter(|_| base.uri().is_empty()),
-			(S::Search(_), S::Archive(_)) => Some(prefix).filter(|_| base.uri().is_empty()),
-			(S::Archive(_), S::Regular) => Some(prefix).filter(|_| self.uri().is_empty()),
-			(S::Archive(_), S::Search(_)) => Some(prefix).filter(|_| self.uri().is_empty()),
+			(S::Regular, T::Archive(_)) => Some(prefix).filter(|_| base.uri().is_empty()),
+			(S::Search(_), T::Archive(_)) => Some(prefix).filter(|_| base.uri().is_empty()),
+			(S::Archive(_), T::Regular) => Some(prefix).filter(|_| self.uri().is_empty()),
+			(S::Archive(_), T::Search(_)) => Some(prefix).filter(|_| self.uri().is_empty()),
 
 			// Independent virtual file space
-			(S::Regular, S::Sftp(_)) => None,
-			(S::Search(_), S::Sftp(_)) => None,
-			(S::Archive(_), S::Sftp(_)) => None,
-			(S::Sftp(_), S::Regular) => None,
-			(S::Sftp(_), S::Search(_)) => None,
-			(S::Sftp(_), S::Archive(_)) => None,
+			(S::Regular, T::Sftp(_)) => None,
+			(S::Search(_), T::Sftp(_)) => None,
+			(S::Archive(_), T::Sftp(_)) => None,
+			(S::Sftp(_), T::Regular) => None,
+			(S::Sftp(_), T::Search(_)) => None,
+			(S::Sftp(_), T::Archive(_)) => None,
 		}?))
 	}
 
 	#[inline]
-	pub fn as_path(&self) -> Option<&Path> {
-		Some(self.loc.as_path()).filter(|_| !self.scheme.is_virtual())
-	}
+	pub fn as_path(&self) -> Option<&Path> { self.as_url().as_path() }
 
 	#[inline]
 	pub fn into_path(self) -> Option<PathBuf> {
@@ -163,11 +155,8 @@ impl UrlBuf {
 		Self { loc: self.loc.rebase(base), scheme: self.scheme.clone() }
 	}
 
-	// TODO: use Urn instead of UrlBuf
 	#[inline]
-	pub fn pair(&self) -> Option<(Url<'_>, UrnBuf)> {
-		Some((self.parent_url()?, self.loc.urn_owned()))
-	}
+	pub fn pair(&self) -> Option<(Url<'_>, &Urn)> { self.as_url().pair() }
 
 	#[inline]
 	pub fn hash_u64(&self) -> u64 { foldhash::fast::FixedState::default().hash_one(self) }
@@ -232,6 +221,30 @@ impl UrlBuf {
 	// FIXME: remove
 	#[inline]
 	pub fn into_path2(self) -> PathBuf { self.loc.into_path() }
+
+	#[inline]
+	pub fn name(&self) -> Option<&OsStr> { self.as_url().name() }
+
+	#[inline]
+	pub fn stem(&self) -> Option<&OsStr> { self.as_url().stem() }
+
+	#[inline]
+	pub fn ext(&self) -> Option<&OsStr> { self.as_url().ext() }
+
+	#[inline]
+	pub fn uri(&self) -> &Uri { self.as_url().uri() }
+
+	#[inline]
+	pub fn urn(&self) -> &Urn { self.as_url().urn() }
+
+	#[inline]
+	pub fn is_absolute(&self) -> bool { self.as_url().is_absolute() }
+
+	#[inline]
+	pub fn has_root(&self) -> bool { self.as_url().has_root() }
+
+	#[inline]
+	pub fn has_trail(&self) -> bool { self.as_url().has_trail() }
 }
 
 impl Debug for UrlBuf {
@@ -299,7 +312,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_parent_url() -> anyhow::Result<()> {
+	fn test_parent() -> anyhow::Result<()> {
 		crate::init_tests();
 		let cases = [
 			// Regular
@@ -326,7 +339,7 @@ mod tests {
 
 		for (path, expected) in cases {
 			let path: UrlBuf = path.parse()?;
-			assert_eq!(path.parent_url().map(|u| format!("{:?}", u)).as_deref(), expected);
+			assert_eq!(path.parent().map(|u| format!("{:?}", u)).as_deref(), expected);
 		}
 
 		Ok(())
@@ -342,7 +355,7 @@ mod tests {
 
 		let u = u.into_search("kw");
 		assert_eq!(format!("{u:?}"), "search://kw//root");
-		assert_eq!(format!("{:?}", u.parent_url().unwrap()), "/");
+		assert_eq!(format!("{:?}", u.parent().unwrap()), "/");
 
 		let u = u.join("examples");
 		assert_eq!(format!("{u:?}"), format!("search://kw:1:1//root{S}examples"));
@@ -350,13 +363,13 @@ mod tests {
 		let u = u.join("README.md");
 		assert_eq!(format!("{u:?}"), format!("search://kw:2:2//root{S}examples{S}README.md"));
 
-		let u = u.parent_url().unwrap();
+		let u = u.parent().unwrap();
 		assert_eq!(format!("{u:?}"), format!("search://kw:1:1//root{S}examples"));
 
-		let u = u.parent_url().unwrap();
+		let u = u.parent().unwrap();
 		assert_eq!(format!("{u:?}"), "search://kw//root");
 
-		let u = u.parent_url().unwrap();
+		let u = u.parent().unwrap();
 		assert_eq!(format!("{u:?}"), "/");
 
 		Ok(())

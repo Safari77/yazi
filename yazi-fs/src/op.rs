@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use hashbrown::{HashMap, HashSet};
 use yazi_macro::relay;
 use yazi_shared::{Id, Ids, url::{UrlBuf, UrnBuf}};
@@ -52,12 +54,12 @@ impl FilesOp {
 	pub fn rename(map: HashMap<UrlBuf, File>) {
 		let mut parents: HashMap<_, (HashSet<_>, HashMap<_, _>)> = Default::default();
 		for (o, n) in map {
-			let Some(o_p) = o.parent_url() else { continue };
-			let Some(n_p) = n.url.parent_url() else { continue };
+			let Some(o_p) = o.parent() else { continue };
+			let Some(n_p) = n.url.parent() else { continue };
 			if o_p != n_p {
-				parents.entry_ref(&o_p).or_default().0.insert(o.urn_owned());
+				parents.entry_ref(&o_p).or_default().0.insert(o.urn().to_owned());
 			}
-			parents.entry_ref(&n_p).or_default().1.insert(n.urn_owned(), n);
+			parents.entry_ref(&n_p).or_default().1.insert(n.urn().to_owned(), n);
 		}
 		for (p, (o, n)) in parents {
 			match (o.is_empty(), n.is_empty()) {
@@ -94,7 +96,7 @@ impl FilesOp {
 		}
 	}
 
-	pub fn chdir(&self, wd: &UrlBuf) -> Self {
+	pub fn chdir(&self, wd: &Path) -> Self {
 		macro_rules! files {
 			($files:expr) => {{ $files.iter().map(|file| file.chdir(wd)).collect() }};
 		}
@@ -102,7 +104,7 @@ impl FilesOp {
 			($map:expr) => {{ $map.iter().map(|(urn, file)| (urn.clone(), file.chdir(wd))).collect() }};
 		}
 
-		let w = wd.clone();
+		let w = UrlBuf::from(wd);
 		match self {
 			Self::Full(_, files, cha) => Self::Full(w, files!(files), *cha),
 			Self::Part(_, files, ticket) => Self::Part(w, files!(files), *ticket),
@@ -124,7 +126,7 @@ impl FilesOp {
 		} else if maybe_exists(cwd).await {
 			Self::IOErr(cwd.clone(), kind).emit();
 		} else if let Some((p, n)) = cwd.pair() {
-			Self::Deleting(p.into(), [n].into()).emit();
+			Self::Deleting(p.into(), [n.into()].into()).emit();
 		}
 	}
 
