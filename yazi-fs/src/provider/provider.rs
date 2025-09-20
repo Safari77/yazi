@@ -2,7 +2,7 @@ use std::{io, path::{Path, PathBuf}};
 
 use yazi_shared::url::{Url, UrlBuf};
 
-use crate::{cha::Cha, provider::{ReadDir, ReadDirSync, RwFile, local::{self, Local}}};
+use crate::{cha::Cha, provider::{Provider, ReadDir, RwFile, local::{self, Local}}};
 
 #[inline]
 pub fn cache<'a, U>(url: U) -> Option<PathBuf>
@@ -10,6 +10,19 @@ where
 	U: Into<Url<'a>>,
 {
 	if let Some(path) = url.into().as_path() { Local::cache(path) } else { None }
+}
+
+#[inline]
+pub async fn calculate<'a, U>(url: U) -> io::Result<u64>
+where
+	U: Into<Url<'a>>,
+{
+	let url: Url = url.into();
+	if let Some(path) = url.as_path() {
+		local::SizeCalculator::total(path).await
+	} else {
+		super::SizeCalculator::total(url).await
+	}
 }
 
 #[inline]
@@ -112,7 +125,7 @@ where
 }
 
 #[inline]
-pub async fn metadata<'a, U>(url: U) -> io::Result<std::fs::Metadata>
+pub async fn metadata<'a, U>(url: U) -> io::Result<Cha>
 where
 	U: Into<Url<'a>>,
 {
@@ -133,36 +146,12 @@ where
 }
 
 #[inline]
-pub async fn open<'a, U>(url: U) -> io::Result<RwFile>
-where
-	U: Into<Url<'a>>,
-{
-	if let Some(path) = url.into().as_path() {
-		Local::open(path).await.map(Into::into)
-	} else {
-		Err(io::Error::new(io::ErrorKind::Unsupported, "Unsupported filesystem"))
-	}
-}
-
-#[inline]
 pub async fn read_dir<'a, U>(url: U) -> io::Result<ReadDir>
 where
 	U: Into<Url<'a>>,
 {
 	if let Some(path) = url.into().as_path() {
 		Local::read_dir(path).await.map(Into::into)
-	} else {
-		Err(io::Error::new(io::ErrorKind::Unsupported, "Unsupported filesystem"))
-	}
-}
-
-#[inline]
-pub fn read_dir_sync<'a, U>(url: U) -> io::Result<ReadDirSync>
-where
-	U: Into<Url<'a>>,
-{
-	if let Some(path) = url.into().as_path() {
-		Local::read_dir_sync(path).map(Into::into)
 	} else {
 		Err(io::Error::new(io::ErrorKind::Unsupported, "Unsupported filesystem"))
 	}
@@ -267,24 +256,12 @@ where
 }
 
 #[inline]
-pub async fn symlink_metadata<'a, U>(url: U) -> io::Result<std::fs::Metadata>
+pub async fn symlink_metadata<'a, U>(url: U) -> io::Result<Cha>
 where
 	U: Into<Url<'a>>,
 {
 	if let Some(path) = url.into().as_path() {
 		Local::symlink_metadata(path).await
-	} else {
-		Err(io::Error::new(io::ErrorKind::Unsupported, "Unsupported filesystem"))
-	}
-}
-
-#[inline]
-pub fn symlink_metadata_sync<'a, U>(url: U) -> io::Result<std::fs::Metadata>
-where
-	U: Into<Url<'a>>,
-{
-	if let Some(path) = url.into().as_path() {
-		Local::symlink_metadata_sync(path)
 	} else {
 		Err(io::Error::new(io::ErrorKind::Unsupported, "Unsupported filesystem"))
 	}

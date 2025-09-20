@@ -1,68 +1,41 @@
-use std::{ffi::OsString, io};
+use std::{borrow::Cow, ffi::OsStr, io};
 
 use yazi_shared::url::UrlBuf;
 
+use crate::{cha::{Cha, ChaType}, provider::FileHolder};
+
 pub enum DirEntry {
 	Local(super::local::DirEntry),
+}
+
+impl From<super::local::DirEntry> for DirEntry {
+	fn from(value: super::local::DirEntry) -> Self { Self::Local(value) }
 }
 
 impl DirEntry {
 	#[must_use]
 	pub fn url(&self) -> UrlBuf {
 		match self {
-			Self::Local(local) => local.url(),
+			Self::Local(local) => local.path().into(),
 		}
 	}
 
 	#[must_use]
-	pub fn file_name(&self) -> OsString {
+	pub fn name(&self) -> Cow<'_, OsStr> {
 		match self {
-			Self::Local(local) => local.file_name(),
+			Self::Local(local) => local.name(),
 		}
 	}
 
-	pub async fn metadata(&self) -> io::Result<std::fs::Metadata> {
+	pub async fn metadata(&self) -> io::Result<Cha> {
 		match self {
 			Self::Local(local) => local.metadata().await,
 		}
 	}
 
-	pub async fn file_type(&self) -> io::Result<std::fs::FileType> {
+	pub async fn file_type(&self) -> io::Result<ChaType> {
 		match self {
 			Self::Local(local) => local.file_type().await,
-		}
-	}
-}
-
-// --- DirEntrySync
-pub enum DirEntrySync {
-	Local(super::local::DirEntrySync),
-}
-
-impl DirEntrySync {
-	#[must_use]
-	pub fn url(&self) -> UrlBuf {
-		match self {
-			Self::Local(local) => local.url(),
-		}
-	}
-
-	#[must_use]
-	pub fn file_name(&self) -> OsString {
-		match self {
-			Self::Local(local) => local.file_name(),
-		}
-	}
-
-	pub fn metadata(&self) -> io::Result<std::fs::Metadata> {
-		match self {
-			Self::Local(local) => local.metadata(),
-		}
-	}
-
-	pub fn file_type(&self) -> io::Result<std::fs::FileType> {
-		match self {
-			Self::Local(local) => local.file_type(),
 		}
 	}
 }

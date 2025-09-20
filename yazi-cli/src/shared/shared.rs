@@ -1,7 +1,7 @@
 use std::{io, path::Path};
 
 use tokio::io::AsyncWriteExt;
-use yazi_fs::{ok_or_not_found, provider::local::{Gate, Local}};
+use yazi_fs::{ok_or_not_found, provider::{FileBuilder, Provider, local::{Gate, Local}}};
 
 #[inline]
 pub async fn must_exists(path: impl AsRef<Path>) -> bool {
@@ -34,7 +34,7 @@ pub async fn copy_and_seal(from: &Path, to: &Path) -> io::Result<()> {
 pub async fn remove_sealed(p: &Path) -> io::Result<()> {
 	#[cfg(windows)]
 	{
-		let mut perm = Local::metadata(p).await?.permissions();
+		let mut perm = tokio::fs::metadata(p).await?.permissions();
 		perm.set_readonly(false);
 		tokio::fs::set_permissions(p, perm).await?;
 	}
