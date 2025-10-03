@@ -5,7 +5,7 @@ use yazi_macro::relay;
 use yazi_shared::{Id, Ids, url::{UrlBuf, UrnBuf}};
 
 use super::File;
-use crate::{cha::Cha, maybe_exists};
+use crate::{cha::Cha, error::Error};
 
 pub static FILES_TICKET: Ids = Ids::new();
 
@@ -15,7 +15,7 @@ pub enum FilesOp {
 	Part(UrlBuf, Vec<File>, Id),
 	Done(UrlBuf, Cha, Id),
 	Size(UrlBuf, HashMap<UrnBuf, u64>),
-	IOErr(UrlBuf, std::io::ErrorKind),
+	IOErr(UrlBuf, Error),
 
 	Creating(UrlBuf, Vec<File>),
 	Deleting(UrlBuf, HashSet<UrnBuf>),
@@ -56,10 +56,12 @@ impl FilesOp {
 		for (o, n) in map {
 			let Some(o_p) = o.parent() else { continue };
 			let Some(n_p) = n.url.parent() else { continue };
-			if o_p != n_p {
+			if o_p == n_p {
+				parents.entry_ref(&o_p).or_default().1.insert(o.urn().to_owned(), n);
+			} else {
 				parents.entry_ref(&o_p).or_default().0.insert(o.urn().to_owned());
+				parents.entry_ref(&n_p).or_default().1.insert(n.urn().to_owned(), n);
 			}
-			parents.entry_ref(&n_p).or_default().1.insert(n.urn().to_owned(), n);
 		}
 		for (p, (o, n)) in parents {
 			match (o.is_empty(), n.is_empty()) {
@@ -110,23 +112,12 @@ impl FilesOp {
 			Self::Part(_, files, ticket) => Self::Part(w, files!(files), *ticket),
 			Self::Done(_, cha, ticket) => Self::Done(w, *cha, *ticket),
 			Self::Size(_, map) => Self::Size(w, map.iter().map(|(urn, &s)| (urn.clone(), s)).collect()),
-			Self::IOErr(_, err) => Self::IOErr(w, *err),
+			Self::IOErr(_, err) => Self::IOErr(w, err.clone()),
 
 			Self::Creating(_, files) => Self::Creating(w, files!(files)),
 			Self::Deleting(_, urns) => Self::Deleting(w, urns.clone()),
 			Self::Updating(_, map) => Self::Updating(w, map!(map)),
 			Self::Upserting(_, map) => Self::Upserting(w, map!(map)),
-		}
-	}
-
-	pub async fn issue_error(cwd: &UrlBuf, kind: std::io::ErrorKind) {
-		use std::io::ErrorKind;
-		if kind != ErrorKind::NotFound {
-			Self::IOErr(cwd.clone(), kind).emit();
-		} else if maybe_exists(cwd).await {
-			Self::IOErr(cwd.clone(), kind).emit();
-		} else if let Some((p, n)) = cwd.pair() {
-			Self::Deleting(p.into(), [n.into()].into()).emit();
 		}
 	}
 

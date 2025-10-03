@@ -1,14 +1,14 @@
-use std::{borrow::Cow, ffi::OsString, process::Stdio};
+use std::{borrow::Cow, ffi::{OsStr, OsString}, process::Stdio};
 
 use anyhow::{Result, bail};
 use tokio::process::{Child, Command};
-use yazi_fs::provider;
+use yazi_fs::FsUrl;
 use yazi_shared::url::UrlBuf;
 
 pub(crate) struct ShellOpt {
 	pub(crate) cwd:    UrlBuf,
 	pub(crate) cmd:    OsString,
-	pub(crate) args:   Vec<OsString>,
+	pub(crate) args:   Vec<Cow<'static, OsStr>>,
 	pub(crate) piped:  bool,
 	pub(crate) orphan: bool,
 }
@@ -30,7 +30,7 @@ pub(crate) async fn shell(opt: ShellOpt) -> Result<Child> {
 	tokio::task::spawn_blocking(move || {
 		let cwd: Cow<_> = if let Some(path) = opt.cwd.as_path() {
 			path.into()
-		} else if let Some(cache) = provider::cache(&opt.cwd) {
+		} else if let Some(cache) = opt.cwd.cache() {
 			std::fs::create_dir_all(&cache).ok();
 			cache.into()
 		} else {
@@ -75,7 +75,7 @@ pub(crate) async fn shell(opt: ShellOpt) -> Result<Child> {
 
 #[cfg(windows)]
 mod parser {
-	use std::{ffi::{OsStr, OsString}, iter::Peekable, os::windows::ffi::{EncodeWide, OsStrExt, OsStringExt}};
+	use std::{borrow::Cow, ffi::{OsStr, OsString}, iter::Peekable, os::windows::ffi::{EncodeWide, OsStrExt, OsStringExt}};
 
 	macro_rules! w {
 		($c:literal) => {
@@ -83,7 +83,7 @@ mod parser {
 		};
 	}
 
-	pub(super) fn parse(cmd: &OsStr, args: &[OsString]) -> OsString {
+	pub(super) fn parse(cmd: &OsStr, args: &[Cow<OsStr>]) -> OsString {
 		if cmd.len() < 2 {
 			return cmd.to_owned();
 		}
@@ -120,7 +120,7 @@ mod parser {
 	fn visit_percent(
 		mut it: Peekable<EncodeWide>,
 		buf: &mut Vec<u16>,
-		args: &[OsString],
+		args: &[Cow<OsStr>],
 		quote: bool,
 	) -> usize {
 		let Some(c) = it.next().and_then(|c| char::from_u32(c as _)) else {
@@ -186,7 +186,7 @@ mod parser {
 
 		fn parse(cmd: &str, args: &[&str]) -> String {
 			let cmd = OsString::from(cmd);
-			let args: Vec<_> = args.iter().map(|&s| OsString::from(s)).collect();
+			let args: Vec<_> = args.iter().map(|&s| OsString::from(s).into()).collect();
 			super::parse(&cmd, &args).to_str().unwrap().to_owned()
 		}
 

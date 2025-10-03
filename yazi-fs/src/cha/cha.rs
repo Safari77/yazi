@@ -5,7 +5,7 @@ use yazi_macro::{unix_either, win_either};
 use yazi_shared::url::Url;
 
 use super::ChaKind;
-use crate::{cha::{ChaMode, ChaType}, provider};
+use crate::cha::{ChaMode, ChaType};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cha {
@@ -50,29 +50,6 @@ impl Cha {
 	#[inline]
 	pub fn new(name: &OsStr, meta: Metadata) -> Self {
 		Self::from_bare(&meta).attach(ChaKind::hidden(name, &meta))
-	}
-
-	#[inline]
-	pub async fn from_url<'a>(url: impl Into<Url<'a>>) -> std::io::Result<Self> {
-		let url = url.into();
-		Ok(Self::from_follow(url, provider::symlink_metadata(url).await?).await)
-	}
-
-	pub async fn from_follow<'a, U>(url: U, mut cha: Self) -> Self
-	where
-		U: Into<Url<'a>>,
-	{
-		let url: Url = url.into();
-		let mut retain = cha.kind & (ChaKind::HIDDEN | ChaKind::SYSTEM);
-
-		if cha.is_link() {
-			cha = provider::metadata(url).await.unwrap_or(cha);
-		}
-		if cha.is_link() {
-			retain |= ChaKind::ORPHAN;
-		}
-
-		cha.attach(retain)
 	}
 
 	pub fn from_dummy<'a, U>(_url: U, r#type: Option<ChaType>) -> Self
@@ -142,7 +119,7 @@ impl Cha {
 	}
 
 	#[inline]
-	fn attach(mut self, kind: ChaKind) -> Self {
+	pub fn attach(mut self, kind: ChaKind) -> Self {
 		self.kind |= kind;
 		self
 	}
@@ -150,7 +127,17 @@ impl Cha {
 
 impl Cha {
 	#[inline]
-	pub const fn is_hidden(&self) -> bool {
+	pub fn is_link(self) -> bool {
+		self.kind.contains(ChaKind::FOLLOW) || *self.mode == ChaType::Link
+	}
+
+	#[inline]
+	pub fn is_orphan(self) -> bool {
+		*self.mode == ChaType::Link && self.kind.contains(ChaKind::FOLLOW)
+	}
+
+	#[inline]
+	pub const fn is_hidden(self) -> bool {
 		win_either!(
 			self.kind.contains(ChaKind::HIDDEN) || self.kind.contains(ChaKind::SYSTEM),
 			self.kind.contains(ChaKind::HIDDEN)
@@ -158,12 +145,9 @@ impl Cha {
 	}
 
 	#[inline]
-	pub const fn is_orphan(&self) -> bool { self.kind.contains(ChaKind::ORPHAN) }
+	pub const fn is_dummy(self) -> bool { self.kind.contains(ChaKind::DUMMY) }
 
-	#[inline]
-	pub const fn is_dummy(&self) -> bool { self.kind.contains(ChaKind::DUMMY) }
-
-	pub fn atime_dur(&self) -> anyhow::Result<Duration> {
+	pub fn atime_dur(self) -> anyhow::Result<Duration> {
 		if let Some(atime) = self.atime {
 			Ok(atime.duration_since(UNIX_EPOCH)?)
 		} else {
@@ -171,7 +155,7 @@ impl Cha {
 		}
 	}
 
-	pub fn mtime_dur(&self) -> anyhow::Result<Duration> {
+	pub fn mtime_dur(self) -> anyhow::Result<Duration> {
 		if let Some(mtime) = self.mtime {
 			Ok(mtime.duration_since(UNIX_EPOCH)?)
 		} else {
@@ -179,7 +163,7 @@ impl Cha {
 		}
 	}
 
-	pub fn btime_dur(&self) -> anyhow::Result<Duration> {
+	pub fn btime_dur(self) -> anyhow::Result<Duration> {
 		if let Some(btime) = self.btime {
 			Ok(btime.duration_since(UNIX_EPOCH)?)
 		} else {
@@ -187,7 +171,7 @@ impl Cha {
 		}
 	}
 
-	pub fn ctime_dur(&self) -> anyhow::Result<Duration> {
+	pub fn ctime_dur(self) -> anyhow::Result<Duration> {
 		if let Some(ctime) = self.ctime {
 			Ok(ctime.duration_since(UNIX_EPOCH)?)
 		} else {

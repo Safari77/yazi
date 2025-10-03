@@ -1,1 +1,1 @@
-yazi_macro::mod_flat!(sftp);
+yazi_macro::mod_flat!(provider vfs);

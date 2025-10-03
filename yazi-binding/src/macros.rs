@@ -156,6 +156,10 @@ macro_rules! impl_file_fields {
 		$crate::cached_field!($fields, name, |lua, me| {
 			me.name().map(|s| lua.create_string(s.as_encoded_bytes())).transpose()
 		});
+		$crate::cached_field!($fields, cache, |_, me| {
+			use yazi_fs::FsUrl;
+			Ok(me.url.cache().map($crate::Url::new))
+		});
 	};
 }
 

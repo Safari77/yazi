@@ -1,12 +1,15 @@
 use std::{io, path::Path};
 
+use yazi_config::vfs::{ProviderSftp, Vfs};
+use yazi_fs::{cha::Cha, provider::FileBuilder};
 use yazi_sftp::fs::{Attrs, Flags};
+use yazi_shared::scheme::SchemeRef;
 
-use crate::provider::FileBuilder;
-
-#[derive(Default)]
 pub struct Gate {
+	sftp: super::Sftp,
+
 	append:     bool,
+	cha:        Option<Cha>,
 	create:     bool,
 	create_new: bool,
 	read:       bool,
@@ -22,6 +25,11 @@ impl FileBuilder for Gate {
 		self
 	}
 
+	fn cha(&mut self, cha: Cha) -> &mut Self {
+		self.cha = Some(cha);
+		self
+	}
+
 	fn create(&mut self, create: bool) -> &mut Self {
 		self.create = create;
 		self
@@ -30,6 +38,25 @@ impl FileBuilder for Gate {
 	fn create_new(&mut self, create_new: bool) -> &mut Self {
 		self.create_new = create_new;
 		self
+	}
+
+	async fn new(scheme: SchemeRef<'_>) -> io::Result<Self> {
+		let sftp: super::Sftp = match scheme {
+			SchemeRef::Sftp(name) => Vfs::provider::<&ProviderSftp>(name).await?.into(),
+			_ => Err(io::Error::new(io::ErrorKind::InvalidInput, "Not an SFTP URL"))?,
+		};
+
+		Ok(Self {
+			sftp,
+
+			append: false,
+			cha: None,
+			create: false,
+			create_new: false,
+			read: false,
+			truncate: false,
+			write: false,
+		})
 	}
 
 	async fn open<P>(&self, path: P) -> io::Result<Self::File>
@@ -55,7 +82,10 @@ impl FileBuilder for Gate {
 		if self.write {
 			flags |= Flags::WRITE;
 		}
-		Ok(super::Sftp::op().await?.open(&path, flags, Attrs::default()).await?)
+
+		let attrs = self.cha.map(super::Cha).map_or(Attrs::default(), Attrs::from);
+
+		Ok(self.sftp.op().await?.open(&path, flags, &attrs).await?)
 	}
 
 	fn read(&mut self, read: bool) -> &mut Self {

@@ -38,11 +38,14 @@ impl Default for Loader {
 			("image".to_owned(), preset!("plugins/image").into()),
 			("json".to_owned(), preset!("plugins/json").into()),
 			("magick".to_owned(), preset!("plugins/magick").into()),
-			("mime".to_owned(), preset!("plugins/mime").into()),
+			("mime".to_owned(), preset!("plugins/mime").into()), // TODO: remove this
+			("mime.dir".to_owned(), preset!("plugins/mime-dir").into()),
+			("mime.file".to_owned(), preset!("plugins/mime-file").into()),
 			("noop".to_owned(), preset!("plugins/noop").into()),
 			("pdf".to_owned(), preset!("plugins/pdf").into()),
 			("session".to_owned(), preset!("plugins/session").into()),
 			("svg".to_owned(), preset!("plugins/svg").into()),
+			("vfs".to_owned(), preset!("plugins/vfs").into()),
 			("video".to_owned(), preset!("plugins/video").into()),
 			("zoxide".to_owned(), preset!("plugins/zoxide").into()),
 		]);
@@ -62,7 +65,7 @@ impl Loader {
 
 		let p = BOOT.plugin_dir.join(format!("{plugin}.yazi/{entry}.lua"));
 		let chunk =
-			Local::read(&p).await.with_context(|| format!("Failed to load plugin from {p:?}"))?.into();
+			Local.read(&p).await.with_context(|| format!("Failed to load plugin from {p:?}"))?.into();
 
 		let result = Self::compatible_or_error(id, &chunk);
 		let inspect = f(&chunk);

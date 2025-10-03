@@ -62,7 +62,7 @@ impl Dependency {
 	}
 
 	pub(super) async fn plugin_files(dir: &Path) -> std::io::Result<Vec<String>> {
-		let mut it = Local::read_dir(dir).await?;
+		let mut it = Local.read_dir(dir).await?;
 		let mut files: Vec<String> =
 			["LICENSE", "README.md", "main.lua"].into_iter().map(Into::into).collect();
 		while let Some(entry) = it.next().await? {

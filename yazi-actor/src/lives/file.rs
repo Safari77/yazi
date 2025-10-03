@@ -16,7 +16,9 @@ pub(super) struct File {
 	v_cha:     Option<Value>,
 	v_url:     Option<Value>,
 	v_link_to: Option<Value>,
-	v_name:    Option<Value>,
+
+	v_name:  Option<Value>,
+	v_cache: Option<Value>,
 }
 
 impl Deref for File {
@@ -48,7 +50,9 @@ impl File {
 					v_cha: None,
 					v_url: None,
 					v_link_to: None,
+
 					v_name: None,
+					v_cache: None,
 				})?;
 				ve.insert(ud.clone());
 				ud
@@ -76,7 +80,7 @@ impl UserData for File {
 		});
 		methods.add_method("mime", |lua, me, ()| {
 			lua.named_registry_value::<AnyUserData>("cx")?.borrow_scoped(|core: &yazi_core::Core| {
-				core.mgr.mimetype.by_url(&me.url).map(|s| lua.create_string(s)).transpose()
+				core.mgr.mimetype.get(&me.url).map(|s| lua.create_string(s)).transpose()
 			})?
 		});
 		methods.add_method("prefix", |lua, me, ()| {
@@ -93,7 +97,7 @@ impl UserData for File {
 		});
 		methods.add_method("style", |lua, me, ()| {
 			lua.named_registry_value::<AnyUserData>("cx")?.borrow_scoped(|core: &yazi_core::Core| {
-				let mime = core.mgr.mimetype.by_file(me).unwrap_or_default();
+				let mime = core.mgr.mimetype.get(&me.url).unwrap_or_default();
 				THEME.filetype.iter().find(|&x| x.matches(me, mime)).map(|x| Style::from(x.style))
 			})
 		});

@@ -1,11 +1,12 @@
 use std::{ffi::OsString, mem, path::MAIN_SEPARATOR_STR};
 
 use anyhow::Result;
-use yazi_fs::{CWD, path::expand_url, provider};
+use yazi_fs::{CWD, path::expand_url, provider::{DirReader, FileHolder}};
 use yazi_macro::{act, render, succ};
 use yazi_parser::cmp::{CmpItem, ShowOpt, TriggerOpt};
 use yazi_proxy::CmpProxy;
-use yazi_shared::{OsStrSplit, event::Data, natsort, url::{UrlBuf, UrlCow, UrnBuf}};
+use yazi_shared::{OsStrSplit, data::Data, natsort, url::{UrlBuf, UrlCow, UrnBuf}};
+use yazi_vfs::provider;
 
 use crate::{Actor, Ctx};
 
@@ -45,7 +46,7 @@ impl Actor for Trigger {
 				cache.push(CmpItem { name: OsString::new(), is_dir: true });
 			}
 
-			while let Ok(Some(ent)) = dir.next_entry().await {
+			while let Ok(Some(ent)) = dir.next().await {
 				if let Ok(ft) = ent.file_type().await {
 					cache.push(CmpItem { name: ent.name().into_owned(), is_dir: ft.is_dir() });
 				}

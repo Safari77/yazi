@@ -4,8 +4,10 @@ use anyhow::{Result, anyhow};
 use tokio::{io::{self, ErrorKind::{AlreadyExists, NotFound}}, sync::mpsc};
 use tracing::warn;
 use yazi_config::YAZI;
-use yazi_fs::{cha::Cha, copy_with_progress, maybe_exists, ok_or_not_found, path::{path_relative_to, skip_url}, provider::{self, DirEntry}};
+use yazi_fs::{cha::Cha, ok_or_not_found, path::{path_relative_to, skip_url}, provider::{DirReader, FileHolder}};
+use yazi_macro::ok_or_not_found;
 use yazi_shared::url::{Url, UrlBuf, UrlCow};
+use yazi_vfs::{VfsCha, copy_with_progress, maybe_exists, provider::{self, DirEntry}};
 
 use super::{FileInDelete, FileInHardlink, FileInLink, FileInPaste, FileInTrash};
 use crate::{LOW, NORMAL, TaskIn, TaskOp, TaskOps, file::{FileOutDelete, FileOutDeleteDo, FileOutHardlink, FileOutHardlinkDo, FileOutLink, FileOutPaste, FileOutPasteDo, FileOutTrash}};
@@ -69,7 +71,7 @@ impl File {
 			});
 
 			let mut it = continue_unless_ok!(provider::read_dir(&src).await);
-			while let Ok(Some(entry)) = it.next_entry().await {
+			while let Ok(Some(entry)) = it.next().await {
 				let from = entry.url();
 				let cha = continue_unless_ok!(Self::entry_cha(entry, &from, task.follow).await);
 
@@ -93,7 +95,7 @@ impl File {
 	}
 
 	pub(crate) async fn paste_do(&self, mut task: FileInPaste) -> Result<(), FileOutPasteDo> {
-		ok_or_not_found(provider::remove_file(&task.to).await)?;
+		ok_or_not_found!(provider::remove_file(&task.to).await);
 		let mut it = copy_with_progress(&task.from, &task.to, task.cha.unwrap());
 
 		while let Some(res) = it.recv().await {
@@ -131,13 +133,11 @@ impl File {
 
 	pub(crate) async fn link_do(&self, task: FileInLink) -> Result<(), FileOutLink> {
 		let src: Cow<_> = if task.resolve {
-			match provider::read_link(&task.from).await {
-				Ok(p) => p.into(),
-				Err(e) if e.kind() == NotFound => {
-					return Ok(self.ops.out(task.id, FileOutLink::Succ));
-				}
-				Err(e) => Err(e)?,
-			}
+			ok_or_not_found!(
+				provider::read_link(&task.from).await,
+				return Ok(self.ops.out(task.id, FileOutLink::Succ))
+			)
+			.into()
 		} else if task.from.scheme.covariant(&task.to.scheme) {
 			task.from.loc.as_path().into()
 		} else {
@@ -150,7 +150,7 @@ impl File {
 			src
 		};
 
-		ok_or_not_found(provider::remove_file(&task.to).await)?;
+		ok_or_not_found!(provider::remove_file(&task.to).await);
 		provider::symlink(&src, &task.to, async || {
 			Ok(match task.cha {
 				Some(cha) => cha.is_dir(),
@@ -203,7 +203,7 @@ impl File {
 			});
 
 			let mut it = continue_unless_ok!(provider::read_dir(&src).await);
-			while let Ok(Some(entry)) = it.next_entry().await {
+			while let Ok(Some(entry)) = it.next().await {
 				let from = entry.url();
 				let cha = continue_unless_ok!(Self::entry_cha(entry, &from, task.follow).await);
 
@@ -230,8 +230,8 @@ impl File {
 			UrlCow::from(&task.from)
 		};
 
-		ok_or_not_found(provider::remove_file(&task.to).await)?;
-		ok_or_not_found(provider::hard_link(&src, &task.to).await)?;
+		ok_or_not_found!(provider::remove_file(&task.to).await);
+		ok_or_not_found!(provider::hard_link(&src, &task.to).await);
 
 		Ok(self.ops.out(task.id, FileOutHardlinkDo::Succ))
 	}
@@ -251,7 +251,7 @@ impl File {
 		while let Some(target) = dirs.pop_front() {
 			let Ok(mut it) = provider::read_dir(&target).await else { continue };
 
-			while let Ok(Some(entry)) = it.next_entry().await {
+			while let Ok(Some(entry)) = it.next().await {
 				let Ok(cha) = entry.metadata().await else { continue };
 
 				if cha.is_dir() {

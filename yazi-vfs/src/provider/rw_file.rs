@@ -1,10 +1,11 @@
-use std::pin::Pin;
+use std::{io, pin::Pin};
 
 use tokio::io::{AsyncRead, AsyncWrite};
+use yazi_fs::cha::Cha;
 
 pub enum RwFile {
 	Tokio(tokio::fs::File),
-	SFTP(Box<yazi_sftp::fs::File>),
+	Sftp(Box<yazi_sftp::fs::File>),
 }
 
 impl From<tokio::fs::File> for RwFile {
@@ -12,7 +13,28 @@ impl From<tokio::fs::File> for RwFile {
 }
 
 impl From<yazi_sftp::fs::File> for RwFile {
-	fn from(f: yazi_sftp::fs::File) -> Self { Self::SFTP(Box::new(f)) }
+	fn from(f: yazi_sftp::fs::File) -> Self { Self::Sftp(Box::new(f)) }
+}
+
+impl RwFile {
+	pub async fn set_cha(&self, cha: Cha) -> io::Result<()> {
+		match self {
+			Self::Tokio(f) => {
+				let std = f.try_clone().await?.into_std().await;
+				tokio::task::spawn_blocking(move || {
+					#[cfg(unix)]
+					std.set_permissions(cha.into()).ok();
+					std.set_times(cha.into()).ok();
+				})
+				.await?;
+			}
+			Self::Sftp(f) => {
+				f.fsetstat(&super::sftp::Cha(cha).into()).await?;
+			}
+		}
+
+		Ok(())
+	}
 }
 
 impl AsyncRead for RwFile {
@@ -21,10 +43,10 @@ impl AsyncRead for RwFile {
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
 		buf: &mut tokio::io::ReadBuf<'_>,
-	) -> std::task::Poll<std::io::Result<()>> {
+	) -> std::task::Poll<io::Result<()>> {
 		match &mut *self {
 			Self::Tokio(f) => Pin::new(f).poll_read(cx, buf),
-			Self::SFTP(f) => Pin::new(f).poll_read(cx, buf),
+			Self::Sftp(f) => Pin::new(f).poll_read(cx, buf),
 		}
 	}
 }
@@ -35,10 +57,10 @@ impl AsyncWrite for RwFile {
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
 		buf: &[u8],
-	) -> std::task::Poll<Result<usize, std::io::Error>> {
+	) -> std::task::Poll<Result<usize, io::Error>> {
 		match &mut *self {
 			Self::Tokio(f) => Pin::new(f).poll_write(cx, buf),
-			Self::SFTP(f) => Pin::new(f).poll_write(cx, buf),
+			Self::Sftp(f) => Pin::new(f).poll_write(cx, buf),
 		}
 	}
 
@@ -46,10 +68,10 @@ impl AsyncWrite for RwFile {
 	fn poll_flush(
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
-	) -> std::task::Poll<Result<(), std::io::Error>> {
+	) -> std::task::Poll<Result<(), io::Error>> {
 		match &mut *self {
 			Self::Tokio(f) => Pin::new(f).poll_flush(cx),
-			Self::SFTP(f) => Pin::new(f).poll_flush(cx),
+			Self::Sftp(f) => Pin::new(f).poll_flush(cx),
 		}
 	}
 
@@ -57,10 +79,10 @@ impl AsyncWrite for RwFile {
 	fn poll_shutdown(
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
-	) -> std::task::Poll<Result<(), std::io::Error>> {
+	) -> std::task::Poll<Result<(), io::Error>> {
 		match &mut *self {
 			Self::Tokio(f) => Pin::new(f).poll_shutdown(cx),
-			Self::SFTP(f) => Pin::new(f).poll_shutdown(cx),
+			Self::Sftp(f) => Pin::new(f).poll_shutdown(cx),
 		}
 	}
 
@@ -68,11 +90,11 @@ impl AsyncWrite for RwFile {
 	fn poll_write_vectored(
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
-		bufs: &[std::io::IoSlice<'_>],
-	) -> std::task::Poll<Result<usize, std::io::Error>> {
+		bufs: &[io::IoSlice<'_>],
+	) -> std::task::Poll<Result<usize, io::Error>> {
 		match &mut *self {
 			Self::Tokio(f) => Pin::new(f).poll_write_vectored(cx, bufs),
-			Self::SFTP(f) => Pin::new(f).poll_write_vectored(cx, bufs),
+			Self::Sftp(f) => Pin::new(f).poll_write_vectored(cx, bufs),
 		}
 	}
 
@@ -80,7 +102,7 @@ impl AsyncWrite for RwFile {
 	fn is_write_vectored(&self) -> bool {
 		match self {
 			Self::Tokio(f) => f.is_write_vectored(),
-			Self::SFTP(f) => f.is_write_vectored(),
+			Self::Sftp(f) => f.is_write_vectored(),
 		}
 	}
 }

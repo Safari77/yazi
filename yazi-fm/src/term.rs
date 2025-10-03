@@ -18,7 +18,6 @@ pub(super) struct Term {
 
 impl Term {
 	pub(super) fn start() -> Result<Self> {
-		static SKIP: SyncCell<bool> = SyncCell::new(false);
 		let mut term = Self {
 			inner:       Terminal::new(CrosstermBackend::new(TTY.writer()))?,
 			last_area:   Default::default(),
@@ -26,7 +25,8 @@ impl Term {
 		};
 
 		enable_raw_mode()?;
-		if SKIP.replace(true) && yazi_adapter::TMUX.get() {
+		static FIRST: SyncCell<bool> = SyncCell::new(false);
+		if FIRST.replace(true) && yazi_adapter::TMUX.get() {
 			yazi_adapter::Mux::tmux_passthrough();
 		}
 
@@ -34,9 +34,9 @@ impl Term {
 			TTY.writer(),
 			yazi_term::If(!TMUX.get(), EnterAlternateScreen),
 			Print("\x1bP$q q\x1b\\"), // Request cursor shape (DECRQSS query for DECSCUSR)
-			Print(Mux::csi("\x1b[?12$p")), // Request cursor blink status (DECRQM query for DECSET 12)
+			Print("\x1b[?12$p"),      // Request cursor blink status (DECRQM query for DECSET 12)
 			Print("\x1b[?u"),         // Request keyboard enhancement flags (CSI u)
-			Print(Mux::csi("\x1b[0c")), // Request device attributes
+			Print("\x1b[0c"),         // Request device attributes
 			yazi_term::If(TMUX.get(), EnterAlternateScreen),
 			EnableBracketedPaste,
 			yazi_term::If(!YAZI.mgr.mouse_events.get().is_empty(), EnableMouseCapture),
@@ -44,8 +44,8 @@ impl Term {
 
 		let resp = Emulator::read_until_da1();
 		Mux::tmux_drain()?;
-		yazi_term::RestoreCursor::store(&resp);
 
+		yazi_term::RestoreCursor::store(&resp);
 		CSI_U.store(resp.contains("\x1b[?0u"), Ordering::Relaxed);
 		if CSI_U.load(Ordering::Relaxed) {
 			PushKeyboardEnhancementFlags(

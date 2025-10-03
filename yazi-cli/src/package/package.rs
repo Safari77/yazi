@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use yazi_fs::{Xdg, provider::{Provider, local::Local}};
-use yazi_macro::outln;
+use yazi_macro::{ok_or_not_found, outln};
 
 use super::Dependency;
 
@@ -15,11 +15,8 @@ pub(crate) struct Package {
 
 impl Package {
 	pub(crate) async fn load() -> Result<Self> {
-		Ok(match Local::read_to_string(Self::toml()).await {
-			Ok(s) => toml::from_str(&s)?,
-			Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
-			Err(e) => Err(e)?,
-		})
+		let s = ok_or_not_found!(Local.read_to_string(Self::toml()).await);
+		Ok(toml::from_str(&s)?)
 	}
 
 	pub(crate) async fn add_many(&mut self, uses: &[String]) -> Result<()> {
@@ -135,7 +132,7 @@ impl Package {
 
 	async fn save(&self) -> Result<()> {
 		let s = toml::to_string_pretty(self)?;
-		Local::write(Self::toml(), s).await.context("Failed to write package.toml")
+		Local.write(Self::toml(), s).await.context("Failed to write package.toml")
 	}
 
 	fn toml() -> PathBuf { Xdg::config_dir().join("package.toml") }

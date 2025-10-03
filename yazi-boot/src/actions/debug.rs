@@ -1,9 +1,9 @@
-use std::{env, ffi::OsStr, fmt::Write, path::Path};
+use std::{env, ffi::OsStr, fmt::Write};
 
 use regex::Regex;
 use yazi_adapter::Mux;
 use yazi_config::YAZI;
-use yazi_shared::{timestamp_us, url::UrlBuf};
+use yazi_shared::{timestamp_us, url::Url};
 
 use super::Actions;
 
@@ -46,29 +46,30 @@ impl Actions {
 		writeln!(s, "    WSL: {:?}", yazi_adapter::WSL)?;
 
 		writeln!(s, "\nVariables")?;
-		writeln!(s, "    SHELL           : {:?}", env::var_os("SHELL"))?;
-		writeln!(s, "    EDITOR          : {:?}", env::var_os("EDITOR"))?;
-		writeln!(s, "    VISUAL          : {:?}", env::var_os("VISUAL"))?;
-		writeln!(s, "    YAZI_FILE_ONE   : {:?}", env::var_os("YAZI_FILE_ONE"))?;
-		writeln!(s, "    YAZI_CONFIG_HOME: {:?}", env::var_os("YAZI_CONFIG_HOME"))?;
-		writeln!(s, "    YAZI_ZOXIDE_OPTS: {:?}", env::var_os("YAZI_ZOXIDE_OPTS"))?;
-		writeln!(s, "    FZF_DEFAULT_OPTS: {:?}", env::var_os("FZF_DEFAULT_OPTS"))?;
+		writeln!(s, "    SHELL              : {:?}", env::var_os("SHELL"))?;
+		writeln!(s, "    EDITOR             : {:?}", env::var_os("EDITOR"))?;
+		writeln!(s, "    VISUAL             : {:?}", env::var_os("VISUAL"))?;
+		writeln!(s, "    YAZI_FILE_ONE      : {:?}", env::var_os("YAZI_FILE_ONE"))?;
+		writeln!(s, "    YAZI_CONFIG_HOME   : {:?}", env::var_os("YAZI_CONFIG_HOME"))?;
+		writeln!(s, "    YAZI_ZOXIDE_OPTS   : {:?}", env::var_os("YAZI_ZOXIDE_OPTS"))?;
+		writeln!(s, "    FZF_DEFAULT_OPTS   : {:?}", env::var_os("FZF_DEFAULT_OPTS"))?;
+		writeln!(s, "    FZF_DEFAULT_COMMAND: {:?}", env::var_os("FZF_DEFAULT_COMMAND"))?;
 
 		writeln!(s, "\nText Opener")?;
 		writeln!(
 			s,
 			"    default     : {:?}",
-			YAZI.opener.first(YAZI.open.all(UrlBuf::from(Path::new("f75a.txt")), "text/plain"))
+			YAZI.opener.first(YAZI.open.all(Url::regular("f75a.txt"), "text/plain"))
 		)?;
 		writeln!(
 			s,
 			"    block-create: {:?}",
-			YAZI.opener.block(YAZI.open.all(UrlBuf::from(Path::new("bulk-create.txt")), "text/plain"))
+			YAZI.opener.block(YAZI.open.all(Url::regular("bulk-create.txt"), "text/plain"))
 		)?;
 		writeln!(
 			s,
 			"    block-rename: {:?}",
-			YAZI.opener.block(YAZI.open.all(UrlBuf::from(Path::new("bulk-rename.txt")), "text/plain"))
+			YAZI.opener.block(YAZI.open.all(Url::regular("bulk-rename.txt"), "text/plain"))
 		)?;
 
 		writeln!(s, "\nMultiplexers")?;
