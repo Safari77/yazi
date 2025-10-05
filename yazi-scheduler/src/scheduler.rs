@@ -7,7 +7,7 @@ use tokio::{select, sync::{mpsc::{self, UnboundedReceiver}, oneshot}, task::Join
 use yazi_config::{YAZI, plugin::{Fetcher, Preloader}};
 use yazi_dds::Pump;
 use yazi_fs::FsUrl;
-use yazi_parser::{app::PluginOpt, tasks::ProcessExecOpt};
+use yazi_parser::{app::PluginOpt, tasks::ProcessOpenOpt};
 use yazi_proxy::TasksProxy;
 use yazi_shared::{Id, Throttle, url::UrlBuf};
 use yazi_vfs::{must_be_dir, provider, unique_name};
@@ -81,7 +81,7 @@ impl Scheduler {
 		let id = ongoing.add::<FileProgPaste>(format!("Cut {} to {}", from.display(), to.display()));
 
 		if to.starts_with(&from) && !to.covariant(&from) {
-			return self.ops.out(id, FileOutPaste::Deform("Cannot cut directory into itself".to_owned()));
+			return self.ops.out(id, FileOutPaste::Fail("Cannot cut directory into itself".to_owned()));
 		}
 
 		ongoing.hooks.add_async(id, {
@@ -114,9 +114,7 @@ impl Scheduler {
 		));
 
 		if to.starts_with(&from) && !to.covariant(&from) {
-			return self
-				.ops
-				.out(id, FileOutPaste::Deform("Cannot copy directory into itself".to_owned()));
+			return self.ops.out(id, FileOutPaste::Fail("Cannot copy directory into itself".to_owned()));
 		}
 
 		let file = self.file.clone();
@@ -154,7 +152,7 @@ impl Scheduler {
 		if to.starts_with(&from) && !to.covariant(&from) {
 			return self
 				.ops
-				.out(id, FileOutHardlink::Deform("Cannot hardlink directory into itself".to_owned()));
+				.out(id, FileOutHardlink::Fail("Cannot hardlink directory into itself".to_owned()));
 		}
 
 		let file = self.file.clone();
@@ -212,16 +210,14 @@ impl Scheduler {
 
 	pub fn file_download(&self, from: UrlBuf, done: Option<oneshot::Sender<bool>>) {
 		let mut ongoing = self.ongoing.lock();
-		let id = self.ongoing.lock().add::<FileProgPaste>(format!("Download {}", from.display()));
+		let id = ongoing.add::<FileProgPaste>(format!("Download {}", from.display()));
 
 		if let Some(tx) = done {
 			ongoing.hooks.add_sync(id, move |canceled| _ = tx.send(canceled));
 		}
 
 		let Some(to) = from.cache().map(UrlBuf::from) else {
-			return self
-				.ops
-				.out(id, FileOutPaste::Deform("Unable to download non-remote file".to_owned()));
+			return self.ops.out(id, FileOutPaste::Fail("Cannot download non-remote file".to_owned()));
 		};
 
 		let file = self.file.clone();
@@ -310,7 +306,7 @@ impl Scheduler {
 		}
 	}
 
-	pub fn process_open(&self, ProcessExecOpt { cwd, opener, args, done }: ProcessExecOpt) {
+	pub fn process_open(&self, ProcessOpenOpt { cwd, opener, args, done }: ProcessOpenOpt) {
 		let name = {
 			let args = args.iter().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" ");
 			if args.is_empty() {

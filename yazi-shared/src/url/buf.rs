@@ -1,9 +1,9 @@
-use std::{borrow::Cow, ffi::OsStr, fmt::{Debug, Formatter}, hash::BuildHasher, path::{Path, PathBuf}, str::FromStr};
+use std::{borrow::Cow, ffi::OsStr, fmt::{Debug, Formatter}, hash::BuildHasher, path::{Path, PathBuf}, str::FromStr, sync::OnceLock};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{loc::LocBuf, pool::Pool, scheme::{Scheme, SchemeRef}, url::{Components, Display, Encode, EncodeTilded, Uri, Url, UrlCow, Urn}};
+use crate::{loc::LocBuf, pool::Pool, scheme::{Scheme, SchemeRef}, url::{AsUrl, Components, Display, Encode, EncodeTilded, Uri, Url, UrlCow, Urn}};
 
 #[derive(Clone, Default, Eq, Hash, PartialEq)]
 pub struct UrlBuf {
@@ -80,6 +80,16 @@ impl PartialEq<Url<'_>> for &UrlBuf {
 
 impl UrlBuf {
 	#[inline]
+	pub fn new() -> &'static Self {
+		static U: OnceLock<UrlBuf> = OnceLock::new();
+		U.get_or_init(Self::default)
+
+		// FIXME: use `LocBuf::empty()` when Rust 1.91.0 released
+		// static U: UrlBuf = UrlBuf { loc: LocBuf::empty(), scheme: Scheme::Regular
+		// }; &U
+	}
+
+	#[inline]
 	pub fn join(&self, path: impl AsRef<Path>) -> Self { self.as_url().join(path) }
 
 	#[inline]
@@ -98,18 +108,16 @@ impl UrlBuf {
 	pub fn parent(&self) -> Option<Url<'_>> { self.as_url().parent() }
 
 	#[inline]
-	pub fn starts_with<'a>(&self, base: impl Into<Url<'a>>) -> bool {
-		self.as_url().starts_with(base)
-	}
+	pub fn starts_with(&self, base: impl AsUrl) -> bool { self.as_url().starts_with(base) }
 
 	#[inline]
-	pub fn ends_with<'a>(&self, child: impl Into<Url<'a>>) -> bool { self.as_url().ends_with(child) }
+	pub fn ends_with(&self, child: impl AsUrl) -> bool { self.as_url().ends_with(child) }
 
-	pub fn strip_prefix<'a>(&self, base: impl Into<Url<'a>>) -> Option<&Urn> {
+	pub fn strip_prefix(&self, base: impl AsUrl) -> Option<&Urn> {
 		use Scheme as S;
 		use SchemeRef as T;
 
-		let base = base.into();
+		let base = base.as_url();
 		let prefix = self.loc.strip_prefix(base.loc).ok()?;
 
 		Some(Urn::new(match (&self.scheme, base.scheme) {
@@ -164,7 +172,7 @@ impl UrlBuf {
 
 impl UrlBuf {
 	#[inline]
-	pub fn as_url(&self) -> Url<'_> { Url::from(self) }
+	pub fn as_url(&self) -> Url<'_> { Url { loc: self.loc.as_loc(), scheme: self.scheme.as_ref() } }
 
 	#[inline]
 	pub fn base(&self) -> Option<Url<'_>> { self.as_url().base() }
