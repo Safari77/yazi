@@ -11,7 +11,7 @@ pub(crate) enum FileOutPaste {
 }
 
 impl From<std::io::Error> for FileOutPaste {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutPaste {
@@ -51,7 +51,7 @@ pub(crate) enum FileOutPasteDo {
 }
 
 impl From<std::io::Error> for FileOutPasteDo {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutPasteDo {
@@ -83,11 +83,11 @@ pub(crate) enum FileOutLink {
 }
 
 impl From<anyhow::Error> for FileOutLink {
-	fn from(value: anyhow::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: anyhow::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl From<std::io::Error> for FileOutLink {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutLink {
@@ -126,7 +126,7 @@ pub(crate) enum FileOutHardlink {
 }
 
 impl From<std::io::Error> for FileOutHardlink {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutHardlink {
@@ -160,7 +160,7 @@ pub(crate) enum FileOutHardlinkDo {
 }
 
 impl From<std::io::Error> for FileOutHardlinkDo {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutHardlinkDo {
@@ -188,7 +188,7 @@ pub(crate) enum FileOutDelete {
 }
 
 impl From<std::io::Error> for FileOutDelete {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutDelete {
@@ -221,7 +221,7 @@ pub(crate) enum FileOutDeleteDo {
 }
 
 impl From<std::io::Error> for FileOutDeleteDo {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutDeleteDo {
@@ -248,7 +248,7 @@ pub(crate) enum FileOutTrash {
 }
 
 impl From<std::io::Error> for FileOutTrash {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutTrash {
@@ -276,7 +276,7 @@ pub(crate) enum FileOutDownload {
 }
 
 impl From<std::io::Error> for FileOutDownload {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutDownload {
@@ -313,11 +313,11 @@ pub(crate) enum FileOutDownloadDo {
 }
 
 impl From<std::io::Error> for FileOutDownloadDo {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl From<anyhow::Error> for FileOutDownloadDo {
-	fn from(value: anyhow::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: anyhow::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutDownloadDo {
@@ -351,7 +351,11 @@ pub(crate) enum FileOutUpload {
 }
 
 impl From<std::io::Error> for FileOutUpload {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
+}
+
+impl From<anyhow::Error> for FileOutUpload {
+	fn from(value: anyhow::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutUpload {
@@ -382,17 +386,16 @@ impl FileOutUpload {
 #[derive(Debug)]
 pub(crate) enum FileOutUploadDo {
 	Adv(u64),
-	Log(String),
 	Succ,
 	Fail(String),
 }
 
 impl From<std::io::Error> for FileOutUploadDo {
-	fn from(value: std::io::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: std::io::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl From<anyhow::Error> for FileOutUploadDo {
-	fn from(value: anyhow::Error) -> Self { Self::Fail(value.to_string()) }
+	fn from(value: anyhow::Error) -> Self { Self::Fail(format!("{value:?}")) }
 }
 
 impl FileOutUploadDo {
@@ -401,9 +404,6 @@ impl FileOutUploadDo {
 		match self {
 			Self::Adv(size) => {
 				prog.processed_bytes += size;
-			}
-			Self::Log(line) => {
-				task.log(line);
 			}
 			Self::Succ => {
 				prog.success_files += 1;

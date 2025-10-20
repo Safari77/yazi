@@ -3,7 +3,7 @@ use std::ops::Deref;
 use mlua::{AnyUserData, ExternalError, FromLua, Lua, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataRef, Value};
 use yazi_shared::{IntoOsStr, url::{AsUrl, UrlCow, UrlLike}};
 
-use crate::{Urn, cached_field, deprecate};
+use crate::{Scheme, Urn, cached_field, deprecate};
 
 pub type UrlRef = UserDataRef<Url>;
 
@@ -16,6 +16,8 @@ pub struct Url {
 	v_urn:    Option<Value>,
 	v_base:   Option<Value>,
 	v_parent: Option<Value>,
+
+	v_scheme: Option<Value>,
 	v_domain: Option<Value>,
 }
 
@@ -41,12 +43,6 @@ impl From<Url> for yazi_shared::url::UrlBuf {
 	fn from(value: Url) -> Self { value.inner }
 }
 
-impl<'a> From<&'a Url> for UrlCow<'a> {
-	fn from(value: &'a Url) -> Self {
-		UrlCow::Borrowed { loc: value.loc.as_loc(), scheme: value.scheme.as_ref().into() }
-	}
-}
-
 impl From<Url> for yazi_shared::url::UrlBufCov {
 	fn from(value: Url) -> Self { Self(value.inner) }
 }
@@ -70,6 +66,8 @@ impl Url {
 			v_urn:    None,
 			v_base:   None,
 			v_parent: None,
+
+			v_scheme: None,
 			v_domain: None,
 		}
 	}
@@ -111,6 +109,8 @@ impl UserData for Url {
 		cached_field!(fields, parent, |_, me| Ok(me.parent().map(Self::new)));
 		cached_field!(fields, urn, |_, me| Ok(Urn::new(me.urn())));
 		cached_field!(fields, base, |_, me| Ok(me.base().map(Self::new)));
+
+		cached_field!(fields, scheme, |_, me| Ok(Scheme::new(&me.scheme)));
 		cached_field!(fields, domain, |lua, me| {
 			me.scheme.domain().map(|s| lua.create_string(s)).transpose()
 		});
