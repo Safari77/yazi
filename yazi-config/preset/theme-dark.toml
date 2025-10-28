@@ -99,8 +99,8 @@ perm_exec  = { fg = "cyan" }
 
 # Progress
 progress_label  = { bold = true }
-progress_normal = { fg = "blue", bg = "black" }
-progress_error  = { fg = "blue", bg = "red" }
+progress_normal = { fg = "green", bg = "black" }
+progress_error  = { fg = "yellow", bg = "red" }
 
 # : }}}
 
@@ -232,7 +232,7 @@ rules = [
 	# Document
 	{ mime = "application/{pdf,doc,rtf}", fg = "cyan" },
 	# Virtual file system
-	{ mime = "vfs/*", fg = "gray" },
+	{ mime = "vfs/{absent,stale}", fg = "gray" },
 	# Special file
 	{ url = "*", is = "orphan", bg = "red" },
 	{ url = "*", is = "exec"  , fg = "green" },
