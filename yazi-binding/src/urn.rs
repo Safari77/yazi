@@ -1,32 +1,36 @@
-use std::ops::Deref;
+use std::{ops::Deref, path::PathBuf};
 
 use mlua::{ExternalError, FromLua, Lua, UserData, Value};
+use yazi_shared::path::PathBufLike;
 
-pub struct Urn {
-	inner: yazi_shared::url::UrnBuf,
+pub struct Path<P: PathBufLike = PathBuf>(pub P);
+
+impl<P> Deref for Path<P>
+where
+	P: PathBufLike,
+{
+	type Target = P;
+
+	fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-impl Deref for Urn {
-	type Target = yazi_shared::url::UrnBuf;
-
-	fn deref(&self) -> &Self::Target { &self.inner }
+impl<P> Path<P>
+where
+	P: PathBufLike,
+{
+	pub fn new(urn: impl Into<P>) -> Self { Self(urn.into()) }
 }
 
-impl From<Urn> for yazi_shared::url::UrnBuf {
-	fn from(value: Urn) -> Self { value.inner }
-}
-
-impl Urn {
-	pub fn new(urn: impl Into<yazi_shared::url::UrnBuf>) -> Self { Self { inner: urn.into() } }
-}
-
-impl FromLua for Urn {
+impl<P> FromLua for Path<P>
+where
+	P: PathBufLike,
+{
 	fn from_lua(value: Value, _: &Lua) -> mlua::Result<Self> {
 		Ok(match value {
 			Value::UserData(ud) => ud.take()?,
-			_ => Err("Expected a Urn".into_lua_err())?,
+			_ => Err("Expected a Path".into_lua_err())?,
 		})
 	}
 }
 
-impl UserData for Urn {}
+impl<P> UserData for Path<P> where P: PathBufLike {}
